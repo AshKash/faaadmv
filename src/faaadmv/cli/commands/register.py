@@ -86,8 +86,20 @@ def run_register(
             if not vehicle_only:
                 owner_data = _collect_owner_info()
 
-        if not vehicle_only:
+        if payment_only:
             payment_data = _collect_payment_info()
+        elif not vehicle_only:
+            # Payment is optional during full registration
+            console.print("[bold cyan]--- Payment (Optional) ---[/bold cyan]")
+            console.print()
+            console.print("[dim]  Payment info is only needed for renewals.[/dim]")
+            console.print("[dim]  You can add it later with 'faaadmv register --payment'.[/dim]")
+            console.print()
+            if Confirm.ask("  Add payment information now?", default=False):
+                console.print()
+                payment_data = _collect_payment_info()
+            else:
+                console.print()
 
         # Build and validate models
         vehicle = _build_vehicle(vehicle_data, existing_config)

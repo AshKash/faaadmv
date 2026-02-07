@@ -12,7 +12,7 @@ from faaadmv.core.config import ConfigManager
 
 runner = CliRunner()
 
-# Simulated user input for full registration
+# Simulated user input for full registration (with payment)
 REGISTER_INPUT = "\n".join([
     "8ABC123",           # plate
     "12345",             # vin last 5
@@ -23,11 +23,28 @@ REGISTER_INPUT = "\n".join([
     "Los Angeles",       # city
     "CA",                # state
     "90001",             # zip
+    "y",                 # yes, add payment
     "4242424242424242",  # card number
     "12",                # exp month
     "27",                # exp year
     "123",               # cvv
     "90001",             # billing zip
+    "testpass1234",      # passphrase
+    "testpass1234",      # confirm passphrase
+])
+
+# Simulated user input for registration without payment
+REGISTER_INPUT_NO_PAYMENT = "\n".join([
+    "8ABC123",           # plate
+    "12345",             # vin last 5
+    "Jane Doe",          # full name
+    "5551234567",        # phone
+    "jane@example.com",  # email
+    "123 Main Street",   # street
+    "Los Angeles",       # city
+    "CA",                # state
+    "90001",             # zip
+    "n",                 # no payment
     "testpass1234",      # passphrase
     "testpass1234",      # confirm passphrase
 ])
@@ -117,6 +134,23 @@ class TestRegisterFlow:
         assert result.exit_code == 0
         assert "deleted" in result.output.lower() or "Configuration" in result.output
         assert not real_manager.exists, "Config file still exists after reset"
+
+    def test_register_without_payment(self, tmp_path, mock_keyring):
+        """Register without payment info — should still succeed."""
+        config_dir = tmp_path / ".config" / "faaadmv"
+
+        with patch("faaadmv.cli.commands.register.ConfigManager") as MockCM:
+            real_manager = ConfigManager(config_dir=config_dir)
+            MockCM.return_value = real_manager
+
+            result = runner.invoke(app, ["register"], input=REGISTER_INPUT_NO_PAYMENT)
+
+        assert result.exit_code == 0, f"Register failed: {result.output}"
+        assert "Configuration saved" in result.output
+
+        loaded = real_manager.load("testpass1234")
+        assert loaded.vehicle.plate == "8ABC123"
+        assert loaded.owner.full_name == "Jane Doe"
 
     def test_verify_wrong_passphrase(self, tmp_path, mock_keyring):
         """Verify with wrong passphrase gives clear error."""
