@@ -7,9 +7,9 @@ faaadmv is a layered CLI application that automates DMV vehicle registration ren
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           CLI Layer (Typer + Rich)                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
-│  │ register │ │ vehicles │ │  status  │ │  renew   │ │   help   │     │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                   │
+│  │ register │ │  status  │ │  renew   │ │   help   │                   │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘                   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -58,18 +58,17 @@ faaadmv is a layered CLI application that automates DMV vehicle registration ren
 | Component | Responsibility |
 |-----------|----------------|
 | `app.py` | Typer application, command definitions, argument parsing |
-| `ui.py` | Rich console helpers, prompts, tables, progress indicators |
-| `prompts.py` | Interactive input collection with validation feedback |
+| `ui.py` | Rich console helpers, panels, tables, masked display, formatting |
 
 ### Core Services Layer (`faaadmv/core/`)
 
 | Component | Responsibility |
 |-----------|----------------|
 | `config.py` | Load, save, validate, encrypt/decrypt user configuration |
-| `crypto.py` | Encryption primitives (Fernet, key derivation) |
-| `browser.py` | Playwright browser lifecycle, context management |
+| `crypto.py` | Encryption primitives (Fernet, scrypt key derivation) |
+| `keychain.py` | OS keychain wrapper for payment credentials (via `keyring`) |
+| `browser.py` | Playwright browser lifecycle, tracker blocking, context management |
 | `captcha.py` | CAPTCHA detection, API solving, manual fallback |
-| `exceptions.py` | Custom exception hierarchy |
 
 ### Provider Layer (`faaadmv/providers/`)
 
@@ -119,10 +118,12 @@ Exception Hierarchy:
 │   │   ├── TimeoutError
 │   │   └── SelectorNotFoundError
 │   ├── DMVError
+│   │   ├── VehicleNotFoundError
 │   │   ├── EligibilityError
 │   │   ├── SmogCheckError
 │   │   ├── InsuranceError
 │   │   └── PaymentError
+│   │       └── PaymentDeclinedError
 │   └── CaptchaError
 │       ├── CaptchaDetectedError
 │       └── CaptchaSolveFailedError
@@ -176,7 +177,7 @@ When a command needs a vehicle, it resolves in this order:
 ## Extensibility Points
 
 1. **New States**: Implement `BaseProvider` subclass
-2. **New Vehicles**: Add/remove via `faaadmv vehicles` (planned)
+2. **New Vehicles**: Multi-vehicle support planned (Phase 5)
 3. **New CAPTCHA Solvers**: Add solver to `captcha.py` strategy chain
 4. **New Storage Backends**: Implement `ConfigBackend` protocol
 5. **Custom UI Themes**: Extend Rich theme in `ui.py`

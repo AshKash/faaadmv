@@ -5,13 +5,16 @@ import pytest
 from faaadmv.core.config import ConfigManager
 from faaadmv.models.config import UserConfig
 from faaadmv.models.owner import Address, OwnerInfo
-from faaadmv.models.vehicle import VehicleInfo
+from faaadmv.models.vehicle import VehicleEntry, VehicleInfo
 
 
 @pytest.fixture
 def full_config():
     return UserConfig(
-        vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"),
+        vehicles=[VehicleEntry(
+            vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"),
+            is_default=True,
+        )],
         owner=OwnerInfo(
             full_name="Jane Doe",
             phone="5551234567",
@@ -52,7 +55,7 @@ class TestConfigRoundtrip:
 
         # Metadata
         assert loaded.state == "CA"
-        assert loaded.version == 1
+        assert loaded.version == 2
 
     def test_payment_not_in_encrypted_file(self, temp_config_dir, full_config):
         """Payment data should NOT be in the encrypted config file."""

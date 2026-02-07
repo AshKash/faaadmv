@@ -1,6 +1,8 @@
 """Vehicle data model."""
 
 import re
+from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -50,3 +52,31 @@ class VehicleInfo(BaseModel):
     def masked_vin(self) -> str:
         """Return masked VIN for display."""
         return f"***{self.vin_last5[-2:]}"
+
+
+class VehicleEntry(BaseModel):
+    """A vehicle in the user's vehicle list (v2 schema)."""
+
+    vehicle: VehicleInfo
+    nickname: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="Optional friendly name, e.g. 'My Tesla'",
+    )
+    is_default: bool = Field(default=False)
+    added_at: datetime = Field(default_factory=datetime.now)
+
+    @property
+    def display_name(self) -> str:
+        """Friendly display name: nickname or plate."""
+        return self.nickname or self.vehicle.plate
+
+    @property
+    def plate(self) -> str:
+        """Shortcut to vehicle.plate."""
+        return self.vehicle.plate
+
+    @property
+    def vin_last5(self) -> str:
+        """Shortcut to vehicle.vin_last5."""
+        return self.vehicle.vin_last5

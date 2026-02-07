@@ -13,7 +13,7 @@ from faaadmv.cli.ui import error_panel, success_panel
 from faaadmv.core.config import ConfigManager
 from faaadmv.core.keychain import PaymentKeychain
 from faaadmv.exceptions import ConfigDecryptionError, ConfigNotFoundError
-from faaadmv.models import UserConfig, VehicleInfo
+from faaadmv.models import UserConfig, VehicleEntry, VehicleInfo
 from faaadmv.models.owner import Address, OwnerInfo
 from faaadmv.models.payment import PaymentInfo
 
@@ -110,7 +110,32 @@ def run_register(
             console.print(error_panel("Missing required information."))
             raise typer.Exit(1)
 
-        config = UserConfig(vehicle=vehicle, owner=owner)
+        if vehicle_only and existing_config:
+            # Add/update vehicle in existing config
+            existing_entry = existing_config.get_vehicle(vehicle.plate)
+            if existing_entry:
+                # Update existing vehicle (replace VehicleInfo)
+                new_vehicles = []
+                for v in existing_config.vehicles:
+                    if v.vehicle.plate == vehicle.plate:
+                        new_vehicles.append(v.model_copy(update={"vehicle": vehicle}))
+                    else:
+                        new_vehicles.append(v)
+                config = existing_config.model_copy(update={"vehicles": new_vehicles})
+            else:
+                # Add as new vehicle
+                nickname = Prompt.ask("  Nickname (optional)", default="")
+                nickname = nickname.strip() or None
+                make_default = Confirm.ask("  Set as default?", default=False)
+                config = existing_config.add_vehicle(vehicle, nickname=nickname, is_default=make_default)
+        elif existing_config and payment_only:
+            config = existing_config
+        else:
+            # Fresh registration
+            config = UserConfig(
+                vehicles=[VehicleEntry(vehicle=vehicle, is_default=True)],
+                owner=owner,
+            )
 
         # Get passphrase
         if existing_passphrase:

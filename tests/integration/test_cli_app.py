@@ -31,6 +31,7 @@ class TestCLIEntryPoints:
         assert result.exit_code == 0
         assert "register" in result.output
         assert "status" in result.output
+        assert "vehicles" in result.output
         assert "renew" in result.output
 
     def test_register_help(self):
@@ -107,5 +108,25 @@ class TestRenewCommand:
 
     def test_renew_dry_run_no_config(self):
         result = runner.invoke(app, ["renew", "--dry-run"])
+        assert result.exit_code == 1
+        assert "No configuration found" in result.output
+
+
+class TestVehiclesCommand:
+    def test_vehicles_no_config(self):
+        """Vehicles with no config should fail with helpful message."""
+        result = runner.invoke(app, ["vehicles"])
+        assert result.exit_code == 1
+        assert "No configuration found" in result.output
+
+    def test_vehicles_help(self):
+        result = runner.invoke(app, ["vehicles", "--help"])
+        assert result.exit_code == 0
+        assert "--add" in result.output
+        assert "--remove" in result.output
+        assert "--default" in result.output
+
+    def test_vehicles_add_no_config(self):
+        result = runner.invoke(app, ["vehicles", "--add"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output

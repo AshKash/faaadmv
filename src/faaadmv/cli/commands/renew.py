@@ -34,6 +34,7 @@ from faaadmv.models import (
     FeeBreakdown,
     RenewalResult,
     UserConfig,
+    VehicleInfo,
 )
 from faaadmv.providers import get_provider
 
@@ -44,6 +45,7 @@ def run_renew(
     dry_run: bool = False,
     headed: bool = False,
     verbose: bool = False,
+    plate: Optional[str] = None,
 ) -> None:
     """Run the renew command."""
     console.print()
@@ -65,6 +67,11 @@ def run_renew(
         console.print()
         console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
         raise typer.Exit(1)
+
+    # Select vehicle
+    from faaadmv.cli.commands.status import _select_vehicle
+    entry = _select_vehicle(config, plate)
+    selected_vehicle = entry.vehicle
 
     # Load payment from keychain (required for non-dry-run)
     payment = PaymentKeychain.retrieve()
@@ -93,7 +100,7 @@ def run_renew(
     _step("Loading configuration...", 1, 6)
 
     if verbose:
-        console.print(f"[dim]    Vehicle: {config.vehicle.plate} / {config.vehicle.masked_vin}[/dim]")
+        console.print(f"[dim]    Vehicle: {selected_vehicle.plate} / {selected_vehicle.masked_vin}[/dim]")
         console.print(f"[dim]    Owner: {config.owner.full_name}[/dim]")
         if payment:
             console.print(f"[dim]    Card: {payment.masked_number} ({payment.card_type})[/dim]")
@@ -103,6 +110,7 @@ def run_renew(
         asyncio.run(
             _run_renewal(
                 config=config,
+                vehicle=selected_vehicle,
                 dry_run=dry_run,
                 headed=headed,
                 verbose=verbose,
@@ -172,6 +180,7 @@ def run_renew(
 
 async def _run_renewal(
     config: UserConfig,
+    vehicle: VehicleInfo,
     dry_run: bool,
     headed: bool,
     verbose: bool,
@@ -180,6 +189,7 @@ async def _run_renewal(
 
     Args:
         config: User config with payment attached
+        vehicle: Selected vehicle to renew
         dry_run: Stop before payment
         headed: Show browser window
         verbose: Detailed output
@@ -200,8 +210,8 @@ async def _run_renewal(
             # Step 3: Validate eligibility (also submits vehicle info)
             _step("Submitting vehicle info...", 3, 6)
             eligibility = await provider.validate_eligibility(
-                config.vehicle.plate,
-                config.vehicle.vin_last5,
+                vehicle.plate,
+                vehicle.vin_last5,
             )
 
             # Handle CAPTCHA if detected during eligibility

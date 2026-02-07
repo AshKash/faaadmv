@@ -1,6 +1,7 @@
 """Status command implementation."""
 
 import asyncio
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -21,12 +22,59 @@ from faaadmv.exceptions import (
     VehicleNotFoundError,
 )
 from faaadmv.models import RegistrationStatus, StatusType
+from faaadmv.models.vehicle import VehicleEntry
 from faaadmv.providers import get_provider
 
 console = Console()
 
 
-def run_status(headed: bool = False, verbose: bool = False) -> None:
+def _select_vehicle(config, plate: Optional[str] = None) -> VehicleEntry:
+    """Select a vehicle from config, prompting if needed."""
+    if plate:
+        entry = config.get_vehicle(plate)
+        if not entry:
+            console.print(error_panel(
+                f"Vehicle '{plate}' not found.",
+                f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
+            ))
+            raise typer.Exit(1)
+        return entry
+
+    # Single vehicle → auto-select
+    if len(config.vehicles) == 1:
+        return config.vehicles[0]
+
+    # Multiple vehicles → prompt
+    console.print()
+    console.print("[bold]Select a vehicle:[/bold]")
+    for i, entry in enumerate(config.vehicles, 1):
+        default_marker = " [green](default)[/green]" if entry.is_default else ""
+        name = entry.nickname or entry.vehicle.masked_vin
+        console.print(f"  {i}. {entry.vehicle.plate} — {name}{default_marker}")
+
+    console.print()
+    choice = Prompt.ask(
+        "  Vehicle number",
+        default="1" if config.default_vehicle else None,
+    )
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(config.vehicles):
+            return config.vehicles[idx]
+    except ValueError:
+        pass
+
+    console.print(error_panel("Invalid selection."))
+    raise typer.Exit(1)
+
+
+def run_status(
+    headed: bool = False,
+    verbose: bool = False,
+    plate: Optional[str] = None,
+    all_vehicles: bool = False,
+) -> None:
     """Run the status command."""
     console.print()
 
@@ -48,17 +96,35 @@ def run_status(headed: bool = False, verbose: bool = False) -> None:
         console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
         raise typer.Exit(1)
 
+    if all_vehicles:
+        # Batch check all vehicles
+        for entry in config.vehicles:
+            _run_single_status(entry, config.state, headed, verbose)
+        return
+
+    # Select vehicle
+    entry = _select_vehicle(config, plate)
+    _run_single_status(entry, config.state, headed, verbose)
+
+
+def _run_single_status(
+    entry: VehicleEntry,
+    state: str,
+    headed: bool,
+    verbose: bool,
+) -> None:
+    """Check status for a single vehicle."""
     if verbose:
-        console.print(f"[dim]  Vehicle: {config.vehicle.plate}[/dim]")
-        console.print(f"[dim]  Provider: {config.state}[/dim]")
+        console.print(f"[dim]  Vehicle: {entry.vehicle.plate}[/dim]")
+        console.print(f"[dim]  Provider: {state}[/dim]")
 
     # Run async status check
     try:
         result = asyncio.run(
             _check_status(
-                plate=config.vehicle.plate,
-                vin_last5=config.vehicle.vin_last5,
-                state=config.state,
+                plate=entry.vehicle.plate,
+                vin_last5=entry.vehicle.vin_last5,
+                state=state,
                 headed=headed,
                 verbose=verbose,
             )

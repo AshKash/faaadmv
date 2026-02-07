@@ -13,12 +13,13 @@ from faaadmv.models.results import (
     SmogStatus,
     StatusType,
 )
-from faaadmv.models.vehicle import VehicleInfo
+from faaadmv.models.vehicle import VehicleEntry, VehicleInfo
 
 __all__ = [
     # Config
     "UserConfig",
     # Vehicle
+    "VehicleEntry",
     "VehicleInfo",
     # Owner
     "OwnerInfo",

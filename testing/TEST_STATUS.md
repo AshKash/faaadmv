@@ -19,8 +19,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total tests | **232** |
-| Passed | **232** |
+| Total tests | **246** |
+| Passed | **246** |
 | Failed | **0** |
 | Bugs found | **6** (1 critical, 3 medium, 2 low) — all 6 fixed |
 

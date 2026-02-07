@@ -25,7 +25,7 @@ from faaadmv.models import (
 from faaadmv.models.config import UserConfig
 from faaadmv.models.owner import Address, OwnerInfo
 from faaadmv.models.payment import PaymentInfo
-from faaadmv.models.vehicle import VehicleInfo
+from faaadmv.models.vehicle import VehicleEntry, VehicleInfo
 
 runner = CliRunner()
 
@@ -38,7 +38,10 @@ def saved_config(tmp_path):
     manager = ConfigManager(config_dir=config_dir)
 
     config = UserConfig(
-        vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"),
+        vehicles=[VehicleEntry(
+            vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"),
+            is_default=True,
+        )],
         owner=OwnerInfo(
             full_name="Jane Doe",
             phone="5551234567",

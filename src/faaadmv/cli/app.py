@@ -57,11 +57,25 @@ def status(
         False, "--headed", help="Show browser window (for CAPTCHA)"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+    plate: str = typer.Option(None, "--plate", help="Check specific vehicle by plate"),
+    all_vehicles: bool = typer.Option(False, "--all", help="Check all registered vehicles"),
 ) -> None:
     """Check your current registration status."""
     from faaadmv.cli.commands.status import run_status
 
-    run_status(headed=headed, verbose=verbose)
+    run_status(headed=headed, verbose=verbose, plate=plate, all_vehicles=all_vehicles)
+
+
+@app.command()
+def vehicles(
+    add: bool = typer.Option(False, "--add", help="Add a new vehicle"),
+    remove: str = typer.Option(None, "--remove", help="Remove a vehicle by plate number"),
+    default: str = typer.Option(None, "--default", help="Set default vehicle by plate"),
+) -> None:
+    """Manage registered vehicles."""
+    from faaadmv.cli.commands.vehicles import run_vehicles
+
+    run_vehicles(add=add, remove=remove, default=default)
 
 
 @app.command()
@@ -73,11 +87,12 @@ def renew(
         False, "--headed", help="Show browser window (for CAPTCHA)"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+    plate: str = typer.Option(None, "--plate", help="Renew specific vehicle by plate"),
 ) -> None:
     """Renew your vehicle registration."""
     from faaadmv.cli.commands.renew import run_renew
 
-    run_renew(dry_run=dry_run, headed=headed, verbose=verbose)
+    run_renew(dry_run=dry_run, headed=headed, verbose=verbose, plate=plate)
 
 
 if __name__ == "__main__":

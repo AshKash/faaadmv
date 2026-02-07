@@ -12,7 +12,7 @@ from faaadmv.exceptions import ConfigNotFoundError, ConfigValidationError
 from faaadmv.models import UserConfig
 
 # Current config schema version
-CURRENT_VERSION = 1
+CURRENT_VERSION = 2
 
 
 class ConfigManager:
@@ -120,8 +120,8 @@ class ConfigManager:
 
         # Apply migrations sequentially
         migrations = {
-            # 1 -> 2: example migration
-            # 2: lambda c: {**c, "new_field": "default"},
+            # v1 → v2: single vehicle → vehicle list
+            2: self._migrate_v1_to_v2,
         }
 
         for target_version in range(version + 1, CURRENT_VERSION + 1):
@@ -129,4 +129,21 @@ class ConfigManager:
                 config_dict = migrations[target_version](config_dict)
                 config_dict["version"] = target_version
 
+        return config_dict
+
+    @staticmethod
+    def _migrate_v1_to_v2(config_dict: dict) -> dict:
+        """Migrate v1 (single vehicle) to v2 (vehicle list).
+
+        v1 schema: {vehicle: {plate, vin_last5}, owner: {...}, ...}
+        v2 schema: {vehicles: [{vehicle: {plate, vin_last5}, is_default: true}], owner: {...}, ...}
+        """
+        if "vehicle" in config_dict and "vehicles" not in config_dict:
+            vehicle_data = config_dict.pop("vehicle")
+            config_dict["vehicles"] = [
+                {
+                    "vehicle": vehicle_data,
+                    "is_default": True,
+                }
+            ]
         return config_dict

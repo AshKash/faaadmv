@@ -17,30 +17,52 @@ class VehicleInfo(BaseModel):
 
     plate: str = Field(
         ...,
-        min_length=2,
-        max_length=8,
-        description="License plate number"
+        description="License plate number",
     )
     vin_last5: str = Field(
         ...,
         min_length=5,
         max_length=5,
-        pattern=r"^[A-HJ-NPR-Z0-9]{5}$",
-        description="Last 5 characters of VIN"
+        description="Last 5 characters of VIN",
     )
 
     @field_validator("plate")
     @classmethod
     def normalize_plate(cls, v: str) -> str:
-        """Normalize plate to uppercase, no spaces."""
-        return re.sub(r"[^A-Z0-9]", "", v.upper())
+        """Normalize plate to uppercase, alphanumeric only.
+
+        Strips dashes, spaces, and other non-alphanumeric characters
+        before checking length.
+        """
+        normalized = re.sub(r"[^A-Z0-9]", "", v.upper())
+        if len(normalized) < 2:
+            raise ValueError("Plate must have at least 2 characters")
+        if len(normalized) > 8:
+            raise ValueError("Plate must have at most 8 characters")
+        return normalized
 
     @field_validator("vin_last5")
     @classmethod
-    def normalize_vin(cls, v: str) -> str:
-        """Normalize VIN to uppercase."""
-        return v.upper()
+    def validate_vin(cls, v: str) -> str:
+        """Validate and normalize VIN characters."""
+        normalized = v.upper()
+        # VIN cannot contain I, O, Q
+        if not re.match(r"^[A-HJ-NPR-Z0-9]{5}$", normalized):
+            raise ValueError(
+                "VIN must be 5 alphanumeric characters (I, O, Q not allowed)"
+            )
+        return normalized
+
+    @property
+    def masked_vin(self) -> str:
+        """Return masked VIN for display."""
+        return f"***{self.vin_last5[-2:]}"
 ```
+
+**Key behavior:**
+- Plate length is checked *after* normalization (strips dashes/spaces first)
+- VIN rejects I, O, Q characters (per NHTSA standard)
+- `masked_vin` shows only last 2 characters
 
 ### OwnerInfo
 
@@ -85,7 +107,7 @@ from datetime import date
 class PaymentInfo(BaseModel):
     """Payment card information. Stored in OS keychain."""
 
-    card_number: SecretStr = Field(..., description="16-digit card number")
+    card_number: SecretStr = Field(..., description="Credit/debit card number")
     expiry_month: int = Field(..., ge=1, le=12)
     expiry_year: int = Field(..., ge=2024, le=2099)
     cvv: SecretStr = Field(..., description="3-4 digit security code")
@@ -94,10 +116,14 @@ class PaymentInfo(BaseModel):
     @field_validator("card_number")
     @classmethod
     def validate_card_luhn(cls, v: SecretStr) -> SecretStr:
-        """Validate card number using Luhn algorithm."""
+        """Validate card number format and Luhn checksum."""
         digits = v.get_secret_value().replace(" ", "").replace("-", "")
-        if not digits.isdigit() or len(digits) not in (15, 16):
-            raise ValueError("Invalid card number format")
+        if not digits.isdigit():
+            raise ValueError("Card number must contain only digits")
+        if len(digits) not in (15, 16):
+            raise ValueError("Card number must be 15 or 16 digits")
+        if digits == "0" * len(digits):
+            raise ValueError("Invalid card number")
         if not cls._luhn_check(digits):
             raise ValueError("Invalid card number (Luhn check failed)")
         return v
@@ -127,9 +153,31 @@ class PaymentInfo(BaseModel):
 
     @property
     def expiry_display(self) -> str:
-        """Format expiry for display."""
+        """Format expiry for display (MM/YY)."""
         return f"{self.expiry_month:02d}/{self.expiry_year % 100:02d}"
+
+    @property
+    def card_type(self) -> str:
+        """Detect card type from number."""
+        first_digit = self.card_number.get_secret_value()[0]
+        first_two = self.card_number.get_secret_value()[:2]
+        if first_digit == "4":
+            return "Visa"
+        elif first_two in ("34", "37"):
+            return "Amex"
+        elif first_digit == "5":
+            return "Mastercard"
+        elif first_digit == "6":
+            return "Discover"
+        else:
+            return "Card"
 ```
+
+**Key behavior:**
+- Accepts 15-digit (Amex) and 16-digit cards
+- Rejects all-zeros card number (BUG-003 fix)
+- `SecretStr` prevents accidental logging of card/CVV
+- `card_type` detects Visa, Amex, Mastercard, Discover
 
 ### UserConfig
 
@@ -141,7 +189,7 @@ from typing import Optional
 from datetime import datetime
 
 class UserConfig(BaseModel):
-    """Complete user configuration (v1 — single vehicle)."""
+    """Complete user configuration (v1 -- single vehicle)."""
 
     version: int = Field(default=1, description="Config schema version")
     created_at: datetime = Field(default_factory=datetime.now)
@@ -162,122 +210,85 @@ class UserConfig(BaseModel):
         self.updated_at = datetime.now()
 ```
 
-### UserConfig v2 (planned — multi-vehicle)
-
-```python
-class VehicleEntry(BaseModel):
-    """A registered vehicle with optional nickname."""
-
-    vehicle: VehicleInfo
-    nickname: Optional[str] = Field(default=None, max_length=30)
-    is_default: bool = Field(default=False)
-    added_at: datetime = Field(default_factory=datetime.now)
-
-class UserConfig(BaseModel):
-    """Complete user configuration (v2 — multi-vehicle)."""
-
-    version: int = Field(default=2)
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-
-    vehicles: list[VehicleEntry] = Field(default_factory=list)
-    owner: OwnerInfo
-
-    payment: Optional[PaymentInfo] = Field(default=None, exclude=True)
-    state: str = Field(default="CA", pattern=r"^[A-Z]{2}$")
-
-    @property
-    def default_vehicle(self) -> Optional[VehicleEntry]:
-        """Get the default vehicle, or the only one, or None."""
-        if len(self.vehicles) == 1:
-            return self.vehicles[0]
-        for v in self.vehicles:
-            if v.is_default:
-                return v
-        return None
-
-    def get_vehicle(self, plate: str) -> Optional[VehicleEntry]:
-        """Look up vehicle by plate."""
-        plate_upper = plate.upper()
-        for v in self.vehicles:
-            if v.vehicle.plate == plate_upper:
-                return v
-        return None
-
-    def add_vehicle(self, vehicle: VehicleInfo, nickname: str = None) -> None:
-        """Add a vehicle. First vehicle becomes default."""
-        is_default = len(self.vehicles) == 0
-        self.vehicles.append(VehicleEntry(
-            vehicle=vehicle, nickname=nickname, is_default=is_default
-        ))
-
-    def remove_vehicle(self, plate: str) -> bool:
-        """Remove a vehicle by plate. Returns True if found."""
-        plate_upper = plate.upper()
-        before = len(self.vehicles)
-        self.vehicles = [v for v in self.vehicles if v.vehicle.plate != plate_upper]
-        # If we removed the default, promote the first remaining
-        if self.vehicles and not any(v.is_default for v in self.vehicles):
-            self.vehicles[0].is_default = True
-        return len(self.vehicles) < before
-```
-
 ## Result Models
 
-### RegistrationStatus
+### StatusType
 
 ```python
-from pydantic import BaseModel
-from enum import Enum
-from typing import Optional
-from datetime import date
-
 class StatusType(str, Enum):
     CURRENT = "current"
     EXPIRING_SOON = "expiring_soon"  # Within 90 days
     PENDING = "pending"
     EXPIRED = "expired"
     HOLD = "hold"
+```
 
+### RegistrationStatus
+
+```python
 class RegistrationStatus(BaseModel):
     """Result of status check."""
 
     plate: str
     vin_last5: str
-    vehicle_description: Optional[str] = None  # "2019 Honda Accord"
-    expiration_date: date
+    vehicle_description: Optional[str] = None  # e.g., "2019 Honda Accord"
+    expiration_date: Optional[date] = None      # None for prose-only DMV response
     status: StatusType
-    days_until_expiry: int
+    days_until_expiry: Optional[int] = None     # None when no expiration date
     hold_reason: Optional[str] = None
+    status_message: Optional[str] = None        # Raw prose text from DMV
+    last_updated: Optional[date] = None         # "as of" date from DMV
 
     @property
     def is_renewable(self) -> bool:
         """Check if vehicle is eligible for online renewal."""
         return self.status in (StatusType.CURRENT, StatusType.EXPIRING_SOON)
+
+    @property
+    def status_display(self) -> str:
+        """Return formatted status for display."""
+        status_map = {
+            StatusType.CURRENT: "Current",
+            StatusType.EXPIRING_SOON: "Expiring Soon",
+            StatusType.PENDING: "Pending",
+            StatusType.EXPIRED: "Expired",
+            StatusType.HOLD: "Hold",
+        }
+        return status_map.get(self.status, str(self.status))
+
+    @property
+    def status_emoji(self) -> str:
+        """Return status indicator for display."""
+        emoji_map = {
+            StatusType.CURRENT: "\u2713",       # checkmark
+            StatusType.EXPIRING_SOON: "\u26a0",  # warning
+            StatusType.PENDING: "\u26a0",         # warning
+            StatusType.EXPIRED: "\u2717",         # X
+            StatusType.HOLD: "\u26a0",            # warning
+        }
+        return emoji_map.get(self.status, "")
 ```
+
+**Key behavior:**
+- `expiration_date` and `days_until_expiry` are `Optional` because the CA DMV status page returns prose text, not structured dates
+- `status_message` stores the raw DMV prose (e.g., "An application for Vehicle Registration... is in progress")
+- `last_updated` is the "as of" date extracted from a bold `<span>` on the results page
 
 ### EligibilityResult
 
 ```python
-from pydantic import BaseModel
-from typing import Optional
-from datetime import date
-
 class SmogStatus(BaseModel):
-    """Smog certification status."""
     passed: bool
     check_date: Optional[date] = None
     station: Optional[str] = None
     certificate_number: Optional[str] = None
 
 class InsuranceStatus(BaseModel):
-    """Insurance verification status."""
     verified: bool
     provider: Optional[str] = None
     policy_number: Optional[str] = None
 
 class EligibilityResult(BaseModel):
-    """Eligibility verification result."""
     eligible: bool
     smog: SmogStatus
     insurance: InsuranceStatus
@@ -287,18 +298,16 @@ class EligibilityResult(BaseModel):
 ### FeeBreakdown
 
 ```python
-from pydantic import BaseModel
-from decimal import Decimal
-from typing import List
-
 class FeeItem(BaseModel):
-    """Individual fee line item."""
     description: str
     amount: Decimal
 
+    @property
+    def amount_display(self) -> str:
+        return f"${self.amount:.2f}"
+
 class FeeBreakdown(BaseModel):
-    """Registration fee breakdown."""
-    items: List[FeeItem]
+    items: list[FeeItem] = Field(default_factory=list)
 
     @property
     def total(self) -> Decimal:
@@ -312,19 +321,19 @@ class FeeBreakdown(BaseModel):
 ### RenewalResult
 
 ```python
-from pydantic import BaseModel
-from typing import Optional
-from datetime import date
-from pathlib import Path
-
 class RenewalResult(BaseModel):
-    """Result of successful renewal."""
     success: bool
     confirmation_number: Optional[str] = None
     new_expiration_date: Optional[date] = None
     amount_paid: Optional[Decimal] = None
     receipt_path: Optional[Path] = None
     error_message: Optional[str] = None
+
+    @property
+    def amount_display(self) -> str:
+        if self.amount_paid:
+            return f"${self.amount_paid:.2f}"
+        return ""
 ```
 
 ## Serialization
@@ -332,8 +341,6 @@ class RenewalResult(BaseModel):
 ### Config File Format
 
 The config is serialized to TOML before encryption.
-
-**v1 (current — single vehicle):**
 
 ```toml
 version = 1
@@ -344,44 +351,6 @@ state = "CA"
 [vehicle]
 plate = "8ABC123"
 vin_last5 = "12345"
-
-[owner]
-full_name = "Jane Doe"
-phone = "5551234567"
-email = "jane@example.com"
-
-[owner.address]
-street = "123 Main Street"
-city = "Los Angeles"
-state = "CA"
-zip_code = "90001"
-```
-
-**v2 (planned — multi-vehicle):**
-
-```toml
-version = 2
-created_at = "2026-02-07T10:30:00"
-updated_at = "2026-02-07T10:30:00"
-state = "CA"
-
-[[vehicles]]
-nickname = "Honda"
-is_default = true
-added_at = "2026-02-07T10:30:00"
-
-[vehicles.vehicle]
-plate = "8ABC123"
-vin_last5 = "12345"
-
-[[vehicles]]
-nickname = "Tesla"
-is_default = false
-added_at = "2026-03-15T09:00:00"
-
-[vehicles.vehicle]
-plate = "7XYZ999"
-vin_last5 = "67890"
 
 [owner]
 full_name = "Jane Doe"
@@ -413,35 +382,8 @@ Config schema versioning supports future migrations:
 ```python
 MIGRATIONS = {
     1: lambda config: config,  # Initial version (no-op)
-    2: _migrate_v1_to_v2,      # Single vehicle → vehicle list
+    2: _migrate_v1_to_v2,      # Single vehicle -> vehicle list (planned)
 }
-
-def _migrate_v1_to_v2(config: dict) -> dict:
-    """Migrate v1 (single vehicle) to v2 (multi-vehicle).
-
-    Wraps the single vehicle in a vehicles list, sets it as default.
-    """
-    vehicle = config.pop("vehicle", None)
-    if vehicle:
-        config["vehicles"] = [
-            {
-                "vehicle": vehicle,
-                "nickname": None,
-                "is_default": True,
-                "added_at": config.get("created_at", datetime.now().isoformat()),
-            }
-        ]
-    else:
-        config["vehicles"] = []
-    return config
-
-def migrate_config(config: dict) -> dict:
-    """Apply migrations up to current version."""
-    current = config.get("version", 1)
-    for version in range(current + 1, CURRENT_VERSION + 1):
-        config = MIGRATIONS[version](config)
-        config["version"] = version
-    return config
 ```
 
-**Migration is automatic and transparent** — when a v1 config is loaded by v2 code, the migration runs on load and re-saves the new format.
+Migration is automatic and transparent -- when a v1 config is loaded by v2 code, the migration runs on load and re-saves the new format.

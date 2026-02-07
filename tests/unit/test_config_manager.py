@@ -6,13 +6,16 @@ from faaadmv.core.config import ConfigManager
 from faaadmv.exceptions import ConfigDecryptionError, ConfigNotFoundError
 from faaadmv.models.config import UserConfig
 from faaadmv.models.owner import Address, OwnerInfo
-from faaadmv.models.vehicle import VehicleInfo
+from faaadmv.models.vehicle import VehicleEntry, VehicleInfo
 
 
 @pytest.fixture
 def sample_config():
     return UserConfig(
-        vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"),
+        vehicles=[VehicleEntry(
+            vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"),
+            is_default=True,
+        )],
         owner=OwnerInfo(
             full_name="Jane Doe",
             phone="5551234567",
@@ -80,7 +83,10 @@ class TestConfigManager:
 
         # Update and re-save
         new_config = UserConfig(
-            vehicle=VehicleInfo(plate="NEWPLATE", vin_last5="99999"),
+            vehicles=[VehicleEntry(
+                vehicle=VehicleInfo(plate="NEWPLATE", vin_last5="99999"),
+                is_default=True,
+            )],
             owner=sample_config.owner,
         )
         manager.save(new_config, passphrase="pass2")
@@ -110,3 +116,56 @@ class TestConfigManager:
         manager.save(sample_config, passphrase="test")
         assert new_dir.exists()
         assert manager.config_path.exists()
+
+
+class TestConfigMigration:
+    """Tests for v1 → v2 schema migration."""
+
+    def test_v1_to_v2_migration(self, temp_config_dir):
+        """v1 config with single vehicle migrates to v2 vehicle list."""
+        import tomli_w
+        from faaadmv.core.crypto import ConfigCrypto
+
+        # Write a v1 config directly (bypassing the model which now creates v2)
+        v1_config = {
+            "version": 1,
+            "vehicle": {"plate": "8ABC123", "vin_last5": "12345"},
+            "owner": {
+                "full_name": "Jane Doe",
+                "phone": "5551234567",
+                "email": "jane@example.com",
+                "address": {
+                    "street": "123 Main St",
+                    "city": "Los Angeles",
+                    "state": "CA",
+                    "zip_code": "90001",
+                },
+            },
+            "state": "CA",
+        }
+
+        toml_str = tomli_w.dumps(v1_config)
+        crypto = ConfigCrypto("testpass")
+        encrypted = crypto.encrypt(toml_str)
+
+        manager = ConfigManager(config_dir=temp_config_dir)
+        temp_config_dir.mkdir(parents=True, exist_ok=True)
+        manager.config_path.write_bytes(encrypted)
+
+        # Load should migrate to v2
+        loaded = manager.load("testpass")
+        assert loaded.version == 2
+        assert len(loaded.vehicles) == 1
+        assert loaded.vehicles[0].is_default is True
+        assert loaded.vehicle.plate == "8ABC123"
+        assert loaded.vehicle.vin_last5 == "12345"
+        assert loaded.owner.full_name == "Jane Doe"
+
+    def test_v2_config_no_migration(self, temp_config_dir, sample_config):
+        """v2 config loads without migration."""
+        manager = ConfigManager(config_dir=temp_config_dir)
+        manager.save(sample_config, passphrase="test")
+        loaded = manager.load("test")
+        assert loaded.version == 2
+        assert len(loaded.vehicles) == 1
+        assert loaded.vehicle.plate == "8ABC123"

@@ -178,18 +178,25 @@
 | CA DMV status from text | testable | `_determine_status_from_text("in progress")` → `PENDING`. `"has been mailed"` → `CURRENT`. `"items due"` → `HOLD`. |
 | BaseProvider helpers | testable | `has_captcha()`, `fill_field()`, `click_and_wait()`, `wait_for_navigation()` — test with mocked Playwright page. |
 
-## Multi-Vehicle Support — *Planned (Phase 5)*
+## Multi-Vehicle Support (Phase 5)
 
 | Feature | Status | Test Hints |
 |---------|--------|------------|
-| Config schema v2 (vehicle list) | not started | `UserConfig` with `vehicles: list[VehicleEntry]` instead of single `vehicle`. |
-| v1 → v2 migration | not started | Load v1 config → auto-migrated to v2 with single vehicle in list, marked default. |
-| `faaadmv vehicles` list | not started | Shows table of registered vehicles with plate, VIN, nickname, default marker. |
-| `faaadmv vehicles --add` | not started | Interactive prompt for plate + VIN + optional nickname. Appended to vehicle list. |
-| `faaadmv vehicles --remove <plate>` | not started | Removes vehicle by plate. Confirmation prompt. Promotes next vehicle to default if needed. |
-| `faaadmv vehicles --default <plate>` | not started | Sets default vehicle. |
-| `--plate` flag on status/renew | not started | `faaadmv status --plate 8ABC123` selects specific vehicle. |
-| Auto-select single vehicle | not started | If only 1 vehicle, use it without prompting. |
-| Interactive vehicle picker | not started | If multiple vehicles + no `--plate` + no default → Rich prompt to select. |
-| Vehicle nickname | not started | Optional label for easy identification in lists. |
-| `faaadmv status --all` | not started | Batch status check for all registered vehicles. |
+| Config schema v2 (vehicle list) | testable | `UserConfig(vehicles=[VehicleEntry(vehicle=VehicleInfo(plate="8ABC123", vin_last5="12345"), is_default=True)], owner=...)`. `config.vehicle` backward compat returns default vehicle's `VehicleInfo`. `config.vehicles` is a `list[VehicleEntry]`. |
+| VehicleEntry model | testable | `VehicleEntry(vehicle=info, nickname="My Car", is_default=True)`. `.plate` and `.vin_last5` shortcuts. `.display_name` returns nickname or plate. |
+| v1 → v2 migration | testable | Write v1 TOML with `vehicle: {plate, vin_last5}`, encrypt, load via `ConfigManager`. Should auto-migrate: `loaded.version == 2`, `len(loaded.vehicles) == 1`, `loaded.vehicles[0].is_default == True`. |
+| `config.add_vehicle()` | testable | Returns new config with vehicle appended. `is_default=True` clears other defaults. |
+| `config.remove_vehicle()` | testable | Returns new config minus vehicle. Raises if last vehicle. Promotes next to default if removed was default. |
+| `config.set_default()` | testable | Returns new config with given plate as default, clears others. Raises if plate not found. |
+| `config.get_vehicle()` | testable | `config.get_vehicle("8ABC123")` returns `VehicleEntry` or `None`. |
+| `faaadmv vehicles` list | testable | With config, `runner.invoke(app, ["vehicles"], input="passphrase\n")` shows table of vehicles. Mock `ConfigManager`. |
+| `faaadmv vehicles --add` | testable | Interactive prompt for plate + VIN + nickname. Saves updated config. Mock `ConfigManager`. Rejects duplicate plates. |
+| `faaadmv vehicles --remove <plate>` | testable | Removes vehicle by plate with confirmation. Rejects last vehicle removal. Mock `ConfigManager`. |
+| `faaadmv vehicles --default <plate>` | testable | Sets default vehicle. Already-default shows message. Not-found shows error. Mock `ConfigManager`. |
+| `--plate` flag on status/renew | testable | `faaadmv status --plate 8ABC123` selects specific vehicle. Not-found plate shows error with list of registered plates. |
+| Auto-select single vehicle | testable | With 1 vehicle, status/renew auto-selects without prompting (no vehicle picker shown). |
+| Interactive vehicle picker | testable | With 2+ vehicles, no `--plate` flag → shows numbered list, prompts for selection. Provide number via `input=`. |
+| Vehicle nickname | testable | `VehicleEntry(vehicle=..., nickname="My Tesla")`. `.display_name` returns `"My Tesla"`. |
+| `faaadmv status --all` | testable | Batch status check for all registered vehicles. Each vehicle checked in sequence. Mock provider. |
+| Payment optional in register | testable | `faaadmv register` prompts "Add payment information now?" defaulting No. Skipping still saves config. `faaadmv register --payment` adds later. |
+| `register --vehicle` adds to list | testable | With existing config, `--vehicle` adds a new vehicle or updates existing plate. Prompts for nickname and default. |
