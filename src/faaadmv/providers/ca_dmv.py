@@ -1,6 +1,7 @@
 """California DMV provider implementation."""
 
-from datetime import date
+import re
+from datetime import date, datetime
 from decimal import Decimal
 
 from faaadmv.exceptions import (
@@ -32,46 +33,32 @@ class CADMVProvider(BaseProvider):
     portal_base_url = "https://www.dmv.ca.gov"
     allowed_domains = ["dmv.ca.gov", "www.dmv.ca.gov"]
 
-    # Portal URLs
-    STATUS_URL = "https://www.dmv.ca.gov/wasapp/ipp2/initPers.do"
-    RENEW_URL = "https://www.dmv.ca.gov/wasapp/vr/vr.do"
+    # Portal URLs (verified against real website 2026-02-07)
+    STATUS_URL = "https://www.dmv.ca.gov/wasapp/rsrc/vrapplication.do"
+    RENEW_URL = "https://www.dmv.ca.gov/wasapp/vrir/start.do?localeName=en"
 
     def get_selectors(self) -> dict[str, str]:
-        """CA DMV portal selectors."""
+        """CA DMV portal selectors (verified against real website)."""
         return {
-            # Status page
-            "plate_input": "#licPlate",
-            "vin_input": "#lastFiveVin",
-            "submit_button": "input[type='submit'][value='Submit']",
-            # Results page
-            "vehicle_info": ".vehicle-info",
-            "expiration_date": ".expiration-date",
-            "status_text": ".registration-status",
-            # Renewal page
-            "owner_name": "#ownerName",
-            "owner_phone": "#phone",
-            "owner_email": "#email",
-            "street_address": "#street",
-            "city": "#city",
-            "state": "#state",
-            "zip": "#zip",
-            # Payment page
-            "card_number": "#cardNumber",
-            "card_expiry_month": "#expMonth",
-            "card_expiry_year": "#expYear",
-            "card_cvv": "#cvv",
-            "billing_zip": "#billingZip",
-            "pay_button": "#submitPayment",
-            # Fee display
-            "fee_table": ".fee-breakdown table",
-            "total_amount": ".total-amount",
-            # Errors
-            "error_message": ".error-message, .alert-danger",
+            # Status check — Step 1: plate
+            "status_plate_input": "#licensePlateNumber",
+            "status_continue": "button[type='submit']",
+            # Status check — Step 2: VIN
+            "status_vin_input": "#individualVinHin",
+            "status_vin_not_found": "#iVinNotFound",
+            # Status check — Results
+            "status_results_fieldset": "fieldset",
+            "status_results_legend": "legend",
+            # Renewal — single page: plate + VIN
+            "renew_plate_input": "#plateNumber",
+            "renew_vin_input": "#vinLast5",
+            "renew_continue": "button[type='submit']",
+            # Error selectors
+            "error_message": ".error-message, .alert-danger, .text--red",
             "smog_error": ".smog-error",
             "insurance_error": ".insurance-error",
             # Confirmation
             "confirmation_number": ".confirmation-number",
-            "print_receipt": "#printReceipt",
         }
 
     async def get_registration_status(
@@ -79,57 +66,142 @@ class CADMVProvider(BaseProvider):
         plate: str,
         vin_last5: str,
     ) -> RegistrationStatus:
-        """Check registration status via CA DMV portal."""
+        """Check registration status via CA DMV portal.
+
+        Multi-step flow:
+        1. Enter license plate → Continue
+        2. Enter VIN (last 5) → Continue
+        3. Parse results page
+        """
         if not self.page:
             raise DMVError("Browser not initialized")
 
         selectors = self.get_selectors()
 
-        # Navigate to status page
+        # Step 1: Navigate to status page and enter plate
         await self.page.goto(self.STATUS_URL)
         await self.wait_for_navigation()
 
-        # Check for CAPTCHA
+        # Check for CAPTCHA on initial page
         if await self.has_captcha():
             from faaadmv.exceptions import CaptchaDetectedError
 
             raise CaptchaDetectedError()
 
-        # Fill form
-        await self.fill_field(selectors["plate_input"], plate)
-        await self.fill_field(selectors["vin_input"], vin_last5)
+        await self.fill_field(selectors["status_plate_input"], plate)
+        await self.click_and_wait(selectors["status_continue"])
 
-        # Submit
-        await self.click_and_wait(selectors["submit_button"])
+        # Step 2: Enter VIN
+        await self.page.wait_for_selector(
+            selectors["status_vin_input"], state="visible", timeout=10000
+        )
+        await self.fill_field(selectors["status_vin_input"], vin_last5)
+        await self.click_and_wait(selectors["status_continue"])
 
-        # Check for errors
-        error_el = await self.page.query_selector(selectors["error_message"])
-        if error_el:
-            error_text = await error_el.inner_text()
-            if "not found" in error_text.lower():
+        # Check for "VIN/HIN NOT FOUND" error (stays on step 2)
+        vin_error = await self.page.query_selector(selectors["status_vin_not_found"])
+        if vin_error:
+            error_text = await vin_error.inner_text()
+            if error_text.strip():
                 raise VehicleNotFoundError(plate)
-            raise DMVError(error_text)
 
-        # Parse results
-        vehicle_info = await self._get_text(selectors["vehicle_info"])
-        exp_text = await self._get_text(selectors["expiration_date"])
-        status_text = await self._get_text(selectors["status_text"])
+        # Step 3: Parse results page
+        return await self._parse_status_results(plate, vin_last5)
 
-        # Parse expiration date
-        exp_date = self._parse_date(exp_text)
-        days_left = (exp_date - date.today()).days
+    async def _parse_status_results(
+        self, plate: str, vin_last5: str
+    ) -> RegistrationStatus:
+        """Parse the status results page.
 
-        # Determine status
-        status = self._determine_status(status_text, days_left)
+        The results page uses a <fieldset> with <legend>Registration Status Update</legend>
+        containing plain <p> tags with prose text. Possible states from HTML comments:
+        InProgress, Mailed, ItemsDue, NotYetReceived.
+        """
+        if not self.page:
+            raise DMVError("Browser not initialized")
+
+        # Look for the results fieldset
+        fieldset = await self.page.query_selector("fieldset")
+        if not fieldset:
+            # Take debug screenshot and raise
+            await self._debug_screenshot("no_fieldset")
+            raise DMVError(
+                "Could not parse DMV response",
+                "The DMV website may have changed. Try --headed to inspect manually.",
+            )
+
+        # Extract all paragraph text from the fieldset
+        paragraphs = await fieldset.query_selector_all("p")
+        all_text = []
+        for p in paragraphs:
+            text = await p.inner_text()
+            cleaned = text.strip()
+            if cleaned:
+                all_text.append(cleaned)
+
+        if not all_text:
+            await self._debug_screenshot("no_text")
+            raise DMVError(
+                "No status information found",
+                "The DMV website may have changed. Try --headed to inspect manually.",
+            )
+
+        full_text = " ".join(all_text)
+
+        # Parse status type from text
+        status = self._determine_status_from_text(full_text)
+
+        # Extract "as of" date from the bold span
+        last_updated = await self._extract_status_date()
+
+        # Build status message from paragraphs
+        status_message = "\n".join(all_text)
 
         return RegistrationStatus(
             plate=plate,
             vin_last5=vin_last5,
-            vehicle_description=vehicle_info,
-            expiration_date=exp_date,
             status=status,
-            days_until_expiry=days_left,
+            status_message=status_message,
+            last_updated=last_updated,
         )
+
+    async def _extract_status_date(self) -> date | None:
+        """Extract the date from the bold styled span on results page."""
+        if not self.page:
+            return None
+
+        # The date is in a <span> with bold styling
+        span = await self.page.query_selector("fieldset span[style*='bold']")
+        if span:
+            text = await span.inner_text()
+            return self._parse_date(text.strip())
+
+        return None
+
+    def _determine_status_from_text(self, text: str) -> StatusType:
+        """Determine status type from the prose text on results page.
+
+        Known states from HTML comments: InProgress, Mailed, ItemsDue, NotYetReceived
+        """
+        text_lower = text.lower()
+
+        if "has been mailed" in text_lower or "was mailed" in text_lower:
+            return StatusType.CURRENT
+        if "items due" in text_lower or "action is required" in text_lower:
+            # "No further action is required" = pending/good
+            # "Action is required" without "no further" = items due
+            if "no further action" in text_lower:
+                return StatusType.PENDING
+            return StatusType.HOLD
+        if "in progress" in text_lower or "not yet been mailed" in text_lower:
+            return StatusType.PENDING
+        if "not yet received" in text_lower:
+            return StatusType.PENDING
+        if "expired" in text_lower:
+            return StatusType.EXPIRED
+
+        # Default to pending if we can't determine
+        return StatusType.PENDING
 
     async def validate_eligibility(
         self,
@@ -147,9 +219,16 @@ class CADMVProvider(BaseProvider):
         await self.wait_for_navigation()
 
         # Fill vehicle info
-        await self.fill_field(selectors["plate_input"], plate)
-        await self.fill_field(selectors["vin_input"], vin_last5)
-        await self.click_and_wait(selectors["submit_button"])
+        await self.fill_field(selectors["renew_plate_input"], plate)
+        await self.fill_field(selectors["renew_vin_input"], vin_last5)
+        await self.click_and_wait(selectors["renew_continue"])
+
+        # Check for errors
+        error_el = await self.page.query_selector(selectors["error_message"])
+        if error_el:
+            error_text = await error_el.inner_text()
+            if "not found" in error_text.lower():
+                raise VehicleNotFoundError(plate)
 
         # Check smog status
         smog_error = await self.page.query_selector(selectors["smog_error"])
@@ -184,9 +263,13 @@ class CADMVProvider(BaseProvider):
         if not self.page:
             raise DMVError("Browser not initialized")
 
-        selectors = self.get_selectors()
+        # Try multiple selectors for fee table
+        fee_table = None
+        for selector in ["table", ".fee-breakdown table", "#feeTable"]:
+            fee_table = await self.page.query_selector(selector)
+            if fee_table:
+                break
 
-        fee_table = await self.page.query_selector(selectors["fee_table"])
         if not fee_table:
             raise DMVError("Fee breakdown not found")
 
@@ -212,43 +295,19 @@ class CADMVProvider(BaseProvider):
         if not config.payment:
             raise DMVError("Payment information not provided")
 
-        selectors = self.get_selectors()
         payment = config.payment
 
-        # Fill owner info
-        await self.fill_field(selectors["owner_name"], config.owner.full_name)
-        await self.fill_field(selectors["owner_phone"], config.owner.phone)
-        await self.fill_field(selectors["owner_email"], config.owner.email)
-        await self.fill_field(
-            selectors["street_address"], config.owner.address.street
-        )
-        await self.fill_field(selectors["city"], config.owner.address.city)
-        await self.fill_field(selectors["zip"], config.owner.address.zip_code)
-
-        # Fill payment info
-        await self.fill_field(
-            selectors["card_number"],
-            payment.card_number.get_secret_value(),
-        )
-        await self.page.select_option(
-            selectors["card_expiry_month"],
-            str(payment.expiry_month),
-        )
-        await self.page.select_option(
-            selectors["card_expiry_year"],
-            str(payment.expiry_year),
-        )
-        await self.fill_field(
-            selectors["card_cvv"],
-            payment.cvv.get_secret_value(),
-        )
-        await self.fill_field(selectors["billing_zip"], payment.billing_zip)
+        # Fill payment info — selectors may need updating once we can test
+        # against a real renewal flow (requires eligible vehicle + valid payment)
+        await self.fill_field("#cardNumber", payment.card_number.get_secret_value())
+        await self.fill_field("#cvv", payment.cvv.get_secret_value())
+        await self.fill_field("#billingZip", payment.billing_zip)
 
         # Submit payment
-        await self.click_and_wait(selectors["pay_button"])
+        await self.click_and_wait("button[type='submit']")
 
         # Check for payment error
-        error_el = await self.page.query_selector(selectors["error_message"])
+        error_el = await self.page.query_selector(".error-message, .alert-danger")
         if error_el:
             error_text = await error_el.inner_text()
             if "declined" in error_text.lower():
@@ -256,7 +315,7 @@ class CADMVProvider(BaseProvider):
             raise DMVError(error_text)
 
         # Extract confirmation
-        conf_el = await self.page.query_selector(selectors["confirmation_number"])
+        conf_el = await self.page.query_selector(".confirmation-number")
         confirmation = await conf_el.inner_text() if conf_el else None
 
         # Save receipt PDF
@@ -284,24 +343,29 @@ class CADMVProvider(BaseProvider):
         el = await self.page.query_selector(selector)
         return await el.inner_text() if el else ""
 
-    def _parse_date(self, text: str) -> date:
+    def _parse_date(self, text: str) -> date | None:
         """Parse date from various formats."""
-        from datetime import datetime
-
-        # Try common formats
-        for fmt in ("%m/%d/%Y", "%B %d, %Y", "%Y-%m-%d"):
+        for fmt in ("%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"):
             try:
                 return datetime.strptime(text.strip(), fmt).date()
             except ValueError:
                 continue
 
-        # Default to 1 year from now if parsing fails
-        return date(date.today().year + 1, date.today().month, 1)
+        # Try to extract date from within longer text
+        match = re.search(
+            r"(\w+ \d{1,2}, \d{4}|\d{1,2}/\d{1,2}/\d{4})", text.strip()
+        )
+        if match:
+            for fmt in ("%B %d, %Y", "%m/%d/%Y"):
+                try:
+                    return datetime.strptime(match.group(1), fmt).date()
+                except ValueError:
+                    continue
+
+        return None
 
     def _parse_amount(self, text: str) -> Decimal:
         """Parse dollar amount from text."""
-        import re
-
         match = re.search(r"\$?([\d,]+\.?\d*)", text)
         if match:
             return Decimal(match.group(1).replace(",", ""))
@@ -319,3 +383,13 @@ class CADMVProvider(BaseProvider):
         if days_left <= 90:
             return StatusType.EXPIRING_SOON
         return StatusType.CURRENT
+
+    async def _debug_screenshot(self, label: str) -> None:
+        """Save a debug screenshot when parsing fails."""
+        if not self.page:
+            return
+        try:
+            path = f"./dmv_debug_{label}_{date.today().isoformat()}.png"
+            await self.page.screenshot(path=path, full_page=True)
+        except Exception:
+            pass  # Don't let screenshot failures mask real errors

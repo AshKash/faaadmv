@@ -26,6 +26,9 @@ class PaymentInfo(BaseModel):
         if len(digits) not in (15, 16):
             raise ValueError("Card number must be 15 or 16 digits")
 
+        if digits == "0" * len(digits):
+            raise ValueError("Invalid card number")
+
         if not cls._luhn_check(digits):
             raise ValueError("Invalid card number (Luhn check failed)")
 

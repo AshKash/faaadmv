@@ -513,7 +513,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[dev]"
+          uv pip install -e ".[dev]"
           playwright install chromium
 
       - name: Run unit tests

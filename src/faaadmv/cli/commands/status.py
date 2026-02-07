@@ -26,7 +26,7 @@ from faaadmv.providers import get_provider
 console = Console()
 
 
-def run_status(verbose: bool = False) -> None:
+def run_status(headed: bool = False, verbose: bool = False) -> None:
     """Run the status command."""
     console.print()
 
@@ -59,6 +59,7 @@ def run_status(verbose: bool = False) -> None:
                 plate=config.vehicle.plate,
                 vin_last5=config.vehicle.vin_last5,
                 state=config.state,
+                headed=headed,
                 verbose=verbose,
             )
         )
@@ -103,6 +104,7 @@ async def _check_status(
     plate: str,
     vin_last5: str,
     state: str,
+    headed: bool = False,
     verbose: bool = False,
 ) -> RegistrationStatus:
     """Run the async status check against DMV portal.
@@ -111,6 +113,7 @@ async def _check_status(
         plate: License plate number
         vin_last5: Last 5 of VIN
         state: State code for provider selection
+        headed: Show browser window (for CAPTCHA)
         verbose: Show detailed output
 
     Returns:
@@ -118,7 +121,7 @@ async def _check_status(
     """
     provider_cls = get_provider(state)
 
-    async with BrowserManager(headless=True) as bm:
+    async with BrowserManager(headless=not headed) as bm:
         provider = provider_cls(bm.context)
         await provider.initialize()
 
@@ -146,19 +149,30 @@ def _display_status(result: RegistrationStatus, verbose: bool = False) -> None:
     # Build panel content
     vehicle_line = f"[bold]{result.vehicle_description or 'Vehicle'}[/bold]"
     plate_line = f"Plate: {result.plate}"
-
     status_line = f"Status:     [{color}]{icon} {result.status_display}[/{color}]"
-    expiry_line = f"Expires:    {result.expiration_date.strftime('%B %d, %Y')}"
 
-    # Days display
-    if result.days_until_expiry > 0:
-        days_line = f"Days left:  {result.days_until_expiry}"
-    elif result.days_until_expiry == 0:
-        days_line = "Days left:  [red]TODAY[/red]"
-    else:
-        days_line = f"Overdue:    [red]{abs(result.days_until_expiry)} days[/red]"
+    content = f"{vehicle_line}\n{plate_line}\n\n{status_line}"
 
-    content = f"{vehicle_line}\n{plate_line}\n\n{status_line}\n{expiry_line}\n{days_line}"
+    # Expiration date (may not be available from DMV status check)
+    if result.expiration_date:
+        content += f"\nExpires:    {result.expiration_date.strftime('%B %d, %Y')}"
+
+        # Days display
+        if result.days_until_expiry is not None:
+            if result.days_until_expiry > 0:
+                content += f"\nDays left:  {result.days_until_expiry}"
+            elif result.days_until_expiry == 0:
+                content += "\nDays left:  [red]TODAY[/red]"
+            else:
+                content += f"\nOverdue:    [red]{abs(result.days_until_expiry)} days[/red]"
+
+    # Last updated date from DMV
+    if result.last_updated:
+        content += f"\nAs of:      {result.last_updated.strftime('%B %d, %Y')}"
+
+    # Status message from DMV (raw prose)
+    if result.status_message:
+        content += f"\n\n[dim]{result.status_message}[/dim]"
 
     # Add hold reason if present
     if result.hold_reason:

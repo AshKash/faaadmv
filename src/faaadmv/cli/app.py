@@ -53,12 +53,15 @@ def register(
 
 @app.command()
 def status(
+    headed: bool = typer.Option(
+        False, "--headed", help="Show browser window (for CAPTCHA)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ) -> None:
     """Check your current registration status."""
     from faaadmv.cli.commands.status import run_status
 
-    run_status(verbose=verbose)
+    run_status(headed=headed, verbose=verbose)
 
 
 @app.command()

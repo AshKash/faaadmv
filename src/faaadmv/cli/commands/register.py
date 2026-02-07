@@ -219,42 +219,43 @@ def _collect_vehicle_info() -> dict:
 
 def _collect_owner_info() -> dict:
     """Collect owner information interactively with validation."""
-    console.print("[bold cyan]--- Owner Information ---[/bold cyan]")
-    console.print()
-
-    name = Prompt.ask("  Full name")
-    phone = Prompt.ask("  Phone number")
-    email = Prompt.ask("  Email address")
-
-    console.print()
-    console.print("[bold cyan]--- Address ---[/bold cyan]")
-    console.print()
-
-    street = Prompt.ask("  Street address")
-    city = Prompt.ask("  City")
-    state = Prompt.ask("  State", default="CA")
-    zip_code = Prompt.ask("  ZIP code")
-
-    # Validate
-    try:
-        OwnerInfo(
-            full_name=name,
-            phone=phone,
-            email=email,
-            address=Address(
-                street=street,
-                city=city,
-                state=state,
-                zip_code=zip_code,
-            ),
-        )
-    except ValidationError as e:
-        for error in e.errors():
-            field = ".".join(str(loc) for loc in error["loc"])
-            msg = error["msg"]
-            console.print(f"  [red]Invalid {field}: {msg}[/red]")
+    while True:
+        console.print("[bold cyan]--- Owner Information ---[/bold cyan]")
         console.print()
-        console.print("[yellow]Continuing with provided values. Fix with 'faaadmv register' later.[/yellow]")
+
+        name = Prompt.ask("  Full name")
+        phone = Prompt.ask("  Phone number")
+        email = Prompt.ask("  Email address")
+
+        console.print()
+        console.print("[bold cyan]--- Address ---[/bold cyan]")
+        console.print()
+
+        street = Prompt.ask("  Street address")
+        city = Prompt.ask("  City")
+        state = Prompt.ask("  State", default="CA")
+        zip_code = Prompt.ask("  ZIP code")
+
+        try:
+            OwnerInfo(
+                full_name=name,
+                phone=phone,
+                email=email,
+                address=Address(
+                    street=street,
+                    city=city,
+                    state=state,
+                    zip_code=zip_code,
+                ),
+            )
+            break
+        except ValidationError as e:
+            for error in e.errors():
+                field = ".".join(str(loc) for loc in error["loc"])
+                msg = error["msg"]
+                console.print(f"  [red]Invalid {field}: {msg}[/red]")
+            console.print("  [dim]Please try again.[/dim]")
+            console.print()
 
     console.print()
     return {

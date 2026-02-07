@@ -25,10 +25,12 @@ class RegistrationStatus(BaseModel):
     plate: str
     vin_last5: str
     vehicle_description: Optional[str] = None  # e.g., "2019 Honda Accord"
-    expiration_date: date
+    expiration_date: Optional[date] = None
     status: StatusType
-    days_until_expiry: int
+    days_until_expiry: Optional[int] = None
     hold_reason: Optional[str] = None
+    status_message: Optional[str] = None  # Raw prose from DMV
+    last_updated: Optional[date] = None  # "as of" date from DMV
 
     @property
     def is_renewable(self) -> bool:

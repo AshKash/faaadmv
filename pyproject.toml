@@ -50,7 +50,7 @@ dev = [
 ]
 
 [project.scripts]
-faaadmv = "faaadmv.cli.app:main"
+faaadmv = "faaadmv.cli.app:app"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/faaadmv"

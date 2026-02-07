@@ -10,8 +10,6 @@ class VehicleInfo(BaseModel):
 
     plate: str = Field(
         ...,
-        min_length=2,
-        max_length=8,
         description="License plate number",
     )
     vin_last5: str = Field(
@@ -24,10 +22,16 @@ class VehicleInfo(BaseModel):
     @field_validator("plate")
     @classmethod
     def normalize_plate(cls, v: str) -> str:
-        """Normalize plate to uppercase, alphanumeric only."""
+        """Normalize plate to uppercase, alphanumeric only.
+
+        Strips dashes, spaces, and other non-alphanumeric characters
+        before checking length.
+        """
         normalized = re.sub(r"[^A-Z0-9]", "", v.upper())
         if len(normalized) < 2:
             raise ValueError("Plate must have at least 2 characters")
+        if len(normalized) > 8:
+            raise ValueError("Plate must have at most 8 characters")
         return normalized
 
     @field_validator("vin_last5")

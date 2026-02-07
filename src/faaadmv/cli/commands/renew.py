@@ -162,6 +162,8 @@ def run_renew(
         console.print()
         console.print("[yellow]Cancelled. No payment was made.[/yellow]")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise  # Let typer.Exit propagate (e.g., user declined payment)
     except Exception as e:
         console.print()
         console.print(error_panel("Unexpected error.", str(e)))

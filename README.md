@@ -15,7 +15,7 @@ faaadmv is an interactive CLI tool that automates DMV vehicle registration renew
 ## Installation
 
 ```bash
-pip install faaadmv
+uv pip install faaadmv
 
 # Install browser (first time only)
 playwright install chromium
@@ -139,7 +139,7 @@ git clone https://github.com/yourusername/faaadmv
 cd faaadmv
 
 # Install in dev mode
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 
 # Run tests
 pytest

@@ -330,8 +330,7 @@ This is an **interactive CLI application** using Rich for beautiful terminal UI.
 
 ### Installation
 ```bash
-pipx install faaadmv
-# or: pip install faaadmv
+uv pip install faaadmv
 
 # Install Playwright browsers (first time only)
 playwright install chromium

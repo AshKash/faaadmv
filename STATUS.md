@@ -128,10 +128,10 @@
 | Feature | Status | Test Hints |
 |---------|--------|------------|
 | Load config + passphrase | testable | Prompts for passphrase, loads real config via `ConfigManager`. |
-| Query DMV portal | testable | Launches browser via `BrowserManager`, calls `provider.get_registration_status()`. For unit tests: mock the provider and browser. |
-| Display real status | testable | `_display_status(result)` renders panel with vehicle, plate, expiration, status. Test by calling directly with a `RegistrationStatus` object. |
+| Query DMV portal | tested | Launches browser via `BrowserManager`, calls `provider.get_registration_status()`. Verified against real CA DMV 2026-02-07. Multi-step form: plate → VIN → results. |
+| Display real status | testable | `_display_status(result)` renders panel with vehicle, plate, status. Handles optional `expiration_date`, `status_message`, `last_updated`. |
 | Display status colors | testable | CURRENT = green, EXPIRING_SOON = yellow, EXPIRED = red. |
-| Display days remaining | testable | Positive days show "Days left: N". Zero shows "TODAY". Negative shows "Overdue: N days". |
+| Display days remaining | testable | Positive days show "Days left: N". Zero shows "TODAY". Negative shows "Overdue: N days". Skips when `days_until_expiry` is None. |
 | Error: config not found | testable | No config → error panel "No configuration found" + guidance. Exit code 1. |
 | Error: wrong passphrase | testable | Bad passphrase → error panel "Wrong passphrase". Exit code 1. |
 | Error: vehicle not found | testable | Provider raises `VehicleNotFoundError` → shown to user. |
@@ -170,10 +170,12 @@
 | Provider registry | testable | `get_provider("CA")` returns `CADMVProvider`. `get_provider("XX")` raises `ValueError`. |
 | List providers | testable | `list_providers()` returns `["CA"]`. |
 | BaseProvider interface | testable | Subclass without all abstract methods → `TypeError`. |
-| CA DMV selectors | testable | `CADMVProvider.get_selectors()` returns dict with keys: `plate_input`, `vin_input`, `submit_button`, `card_number`, etc. |
-| CA DMV date parsing | testable | `provider._parse_date("06/20/2026")` returns `date(2026, 6, 20)`. Supports `%B %d, %Y` format too. |
+| CA DMV selectors | tested | `CADMVProvider.get_selectors()` returns dict with keys: `status_plate_input`, `status_vin_input`, `renew_plate_input`, etc. Verified against real website. |
+| CA DMV status check | tested | Multi-step form: `#licensePlateNumber` → Continue → `#individualVinHin` → Continue → parse fieldset. Verified 2026-02-07. |
+| CA DMV vehicle not found | tested | Invalid plate/VIN → `#iVinNotFound` error label → `VehicleNotFoundError`. Verified 2026-02-07. |
+| CA DMV date parsing | testable | `provider._parse_date("February 07, 2026")` returns `date(2026, 2, 7)`. Supports `%m/%d/%Y` format too. Returns None on failure. |
 | CA DMV amount parsing | testable | `provider._parse_amount("$168.00")` returns `Decimal("168.00")`. Handles commas: `"$1,234.56"` → `Decimal("1234.56")`. |
-| CA DMV status determination | testable | `_determine_status("Current", 100)` → `CURRENT`. `_determine_status("Current", 50)` → `EXPIRING_SOON`. `_determine_status("Expired", -10)` → `EXPIRED`. |
+| CA DMV status from text | testable | `_determine_status_from_text("in progress")` → `PENDING`. `"has been mailed"` → `CURRENT`. `"items due"` → `HOLD`. |
 | BaseProvider helpers | testable | `has_captcha()`, `fill_field()`, `click_and_wait()`, `wait_for_navigation()` — test with mocked Playwright page. |
 
 ## Multi-Vehicle Support — *Planned (Phase 5)*

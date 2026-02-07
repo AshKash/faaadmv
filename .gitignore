@@ -46,6 +46,13 @@ htmlcov/
 *.pdf
 dmv_receipt_*.pdf
 
+# Playwright MCP logs
+.playwright-mcp/
+
+# faaadmv runtime config (encrypted user data)
+.config/faaadmv/
+faaadmv_config.*
+
 # OS
 .DS_Store
 Thumbs.db
