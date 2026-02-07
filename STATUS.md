@@ -175,3 +175,19 @@
 | CA DMV amount parsing | testable | `provider._parse_amount("$168.00")` returns `Decimal("168.00")`. Handles commas: `"$1,234.56"` → `Decimal("1234.56")`. |
 | CA DMV status determination | testable | `_determine_status("Current", 100)` → `CURRENT`. `_determine_status("Current", 50)` → `EXPIRING_SOON`. `_determine_status("Expired", -10)` → `EXPIRED`. |
 | BaseProvider helpers | testable | `has_captcha()`, `fill_field()`, `click_and_wait()`, `wait_for_navigation()` — test with mocked Playwright page. |
+
+## Multi-Vehicle Support — *Planned (Phase 5)*
+
+| Feature | Status | Test Hints |
+|---------|--------|------------|
+| Config schema v2 (vehicle list) | not started | `UserConfig` with `vehicles: list[VehicleEntry]` instead of single `vehicle`. |
+| v1 → v2 migration | not started | Load v1 config → auto-migrated to v2 with single vehicle in list, marked default. |
+| `faaadmv vehicles` list | not started | Shows table of registered vehicles with plate, VIN, nickname, default marker. |
+| `faaadmv vehicles --add` | not started | Interactive prompt for plate + VIN + optional nickname. Appended to vehicle list. |
+| `faaadmv vehicles --remove <plate>` | not started | Removes vehicle by plate. Confirmation prompt. Promotes next vehicle to default if needed. |
+| `faaadmv vehicles --default <plate>` | not started | Sets default vehicle. |
+| `--plate` flag on status/renew | not started | `faaadmv status --plate 8ABC123` selects specific vehicle. |
+| Auto-select single vehicle | not started | If only 1 vehicle, use it without prompting. |
+| Interactive vehicle picker | not started | If multiple vehicles + no `--plate` + no default → Rich prompt to select. |
+| Vehicle nickname | not started | Optional label for easy identification in lists. |
+| `faaadmv status --all` | not started | Batch status check for all registered vehicles. |

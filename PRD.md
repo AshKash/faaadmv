@@ -23,9 +23,15 @@ Interactive setup wizard to gather and securely store user data for "Path A" (No
 **Data Points:**
 | Category | Fields |
 |----------|--------|
-| Vehicle | License Plate, Last 5 digits of VIN |
+| Vehicle | License Plate, Last 5 digits of VIN, Nickname (optional) |
 | Owner | Full Name, Phone, Email, Physical Address |
 | Payment | Card Number, Expiry (MM/YY), CVV, Billing ZIP |
+
+**Multi-Vehicle Support:**
+- Users can register multiple vehicles under a single profile
+- Each vehicle is identified by its plate number (primary key)
+- Owner and payment info are shared across vehicles
+- First registered vehicle becomes the default
 
 **Storage Requirements:**
 - Location: `~/.config/faaadmv/`
@@ -35,12 +41,46 @@ Interactive setup wizard to gather and securely store user data for "Path A" (No
 
 **Commands:**
 ```bash
-faaadmv register               # Interactive first-time setup wizard
-faaadmv register --vehicle     # Update vehicle info only
+faaadmv register               # Interactive first-time setup wizard (adds a vehicle)
+faaadmv register --vehicle     # Add or update a vehicle
 faaadmv register --payment     # Update payment info only
 faaadmv register --verify      # Validate stored config (masked output)
 faaadmv register --reset       # Wipe all stored data (with confirmation)
 ```
+
+### FR1b: Vehicle Management (`faaadmv vehicles`) — *Planned*
+
+Manage multiple registered vehicles.
+
+**Commands:**
+```bash
+faaadmv vehicles               # List all registered vehicles
+faaadmv vehicles --add         # Add a new vehicle (alias for register --vehicle)
+faaadmv vehicles --remove 8ABC123  # Remove a vehicle by plate
+faaadmv vehicles --default 8ABC123 # Set default vehicle
+```
+
+**Example Session:**
+```bash
+$ faaadmv vehicles
+
+  ┌──────────────────────────────────────────────────┐
+  │ Registered Vehicles                              │
+  ├───┬──────────┬───────────┬────────────┬──────────┤
+  │   │ Plate    │ VIN       │ Nickname   │ Default  │
+  ├───┼──────────┼───────────┼────────────┼──────────┤
+  │ 1 │ 8ABC123  │ ***12345  │ Honda      │ ✓        │
+  │ 2 │ 7XYZ999  │ ***67890  │ Tesla      │          │
+  └───┴──────────┴───────────┴────────────┴──────────┘
+
+  2 vehicles registered.
+```
+
+**Vehicle Selection:**
+When multiple vehicles are registered, `status` and `renew` commands:
+1. Use `--plate <PLATE>` if specified
+2. Use the default vehicle if only one, or if a default is set
+3. Prompt the user to select interactively if ambiguous
 
 ---
 
@@ -64,6 +104,11 @@ The core agentic workflow to complete registration renewal via CA DMV Guest Port
 8. Input payment and billing info
 9. Submit and capture confirmation
 10. Download/save PDF receipt to current directory
+
+**Vehicle Selection:**
+- If only one vehicle registered, it is used automatically
+- If multiple vehicles, user must specify: `faaadmv renew --plate 8ABC123`
+- Or select interactively from a list
 
 **Example Session:**
 ```bash
@@ -117,6 +162,8 @@ faaadmv renew --dry-run  # Stops before payment, validates entire flow
 Non-mutating flow to verify current registration standing.
 
 **Logic:** Navigate to DMV Registration Status Tool, extract data.
+
+**Vehicle Selection:** Same rules as `renew` — auto-select single vehicle, `--plate` for multi, or interactive prompt.
 
 **Example Session:**
 ```bash
@@ -292,7 +339,8 @@ playwright install chromium
 
 ### Commands Overview
 ```bash
-faaadmv register      # Interactive setup wizard
+faaadmv register      # Interactive setup wizard (add vehicle + owner + payment)
+faaadmv vehicles      # List / add / remove registered vehicles (planned)
 faaadmv status        # Check current registration status
 faaadmv renew         # Renew registration (with payment)
 faaadmv help          # Show help
@@ -353,6 +401,7 @@ $ faaadmv register --verify
 | `--verbose` / `-v` | Show detailed step-by-step logging |
 | `--headed` | Force visible browser (for CAPTCHA solving) |
 | `--dry-run` | Run without making payment |
+| `--plate <PLATE>` | Specify vehicle (required when multiple registered) |
 | `--state <code>` | Override state (default: CA) |
 
 ---
@@ -409,7 +458,15 @@ $ faaadmv register --verify
 - [ ] End-to-end testing with real accounts
 - [ ] GitHub release with documentation
 
-### Phase 5: Hardening
+### Phase 5: Multi-Vehicle Support
+- [ ] Migrate config schema v1 → v2 (single vehicle → vehicle list)
+- [ ] `faaadmv vehicles` command (list, add, remove, set default)
+- [ ] `--plate` flag on `status` and `renew` for vehicle selection
+- [ ] Interactive vehicle picker when multiple vehicles registered
+- [ ] Optional vehicle nickname for easy identification
+- [ ] Batch status check: `faaadmv status --all`
+
+### Phase 6: Hardening
 - [ ] 2Captcha/Anti-Captcha integration
 - [ ] Retry logic and session recovery
 - [ ] Selector versioning system

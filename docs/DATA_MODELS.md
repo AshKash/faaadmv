@@ -133,13 +133,15 @@ class PaymentInfo(BaseModel):
 
 ### UserConfig
 
+**v1 (current):** Single vehicle per config.
+
 ```python
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 class UserConfig(BaseModel):
-    """Complete user configuration."""
+    """Complete user configuration (v1 — single vehicle)."""
 
     version: int = Field(default=1, description="Config schema version")
     created_at: datetime = Field(default_factory=datetime.now)
@@ -158,6 +160,66 @@ class UserConfig(BaseModel):
     def model_post_init(self, __context) -> None:
         """Update timestamp on any change."""
         self.updated_at = datetime.now()
+```
+
+### UserConfig v2 (planned — multi-vehicle)
+
+```python
+class VehicleEntry(BaseModel):
+    """A registered vehicle with optional nickname."""
+
+    vehicle: VehicleInfo
+    nickname: Optional[str] = Field(default=None, max_length=30)
+    is_default: bool = Field(default=False)
+    added_at: datetime = Field(default_factory=datetime.now)
+
+class UserConfig(BaseModel):
+    """Complete user configuration (v2 — multi-vehicle)."""
+
+    version: int = Field(default=2)
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+    vehicles: list[VehicleEntry] = Field(default_factory=list)
+    owner: OwnerInfo
+
+    payment: Optional[PaymentInfo] = Field(default=None, exclude=True)
+    state: str = Field(default="CA", pattern=r"^[A-Z]{2}$")
+
+    @property
+    def default_vehicle(self) -> Optional[VehicleEntry]:
+        """Get the default vehicle, or the only one, or None."""
+        if len(self.vehicles) == 1:
+            return self.vehicles[0]
+        for v in self.vehicles:
+            if v.is_default:
+                return v
+        return None
+
+    def get_vehicle(self, plate: str) -> Optional[VehicleEntry]:
+        """Look up vehicle by plate."""
+        plate_upper = plate.upper()
+        for v in self.vehicles:
+            if v.vehicle.plate == plate_upper:
+                return v
+        return None
+
+    def add_vehicle(self, vehicle: VehicleInfo, nickname: str = None) -> None:
+        """Add a vehicle. First vehicle becomes default."""
+        is_default = len(self.vehicles) == 0
+        self.vehicles.append(VehicleEntry(
+            vehicle=vehicle, nickname=nickname, is_default=is_default
+        ))
+
+    def remove_vehicle(self, plate: str) -> bool:
+        """Remove a vehicle by plate. Returns True if found."""
+        plate_upper = plate.upper()
+        before = len(self.vehicles)
+        self.vehicles = [v for v in self.vehicles if v.vehicle.plate != plate_upper]
+        # If we removed the default, promote the first remaining
+        if self.vehicles and not any(v.is_default for v in self.vehicles):
+            self.vehicles[0].is_default = True
+        return len(self.vehicles) < before
 ```
 
 ## Result Models
@@ -269,7 +331,9 @@ class RenewalResult(BaseModel):
 
 ### Config File Format
 
-The config is serialized to TOML before encryption:
+The config is serialized to TOML before encryption.
+
+**v1 (current — single vehicle):**
 
 ```toml
 version = 1
@@ -280,6 +344,44 @@ state = "CA"
 [vehicle]
 plate = "8ABC123"
 vin_last5 = "12345"
+
+[owner]
+full_name = "Jane Doe"
+phone = "5551234567"
+email = "jane@example.com"
+
+[owner.address]
+street = "123 Main Street"
+city = "Los Angeles"
+state = "CA"
+zip_code = "90001"
+```
+
+**v2 (planned — multi-vehicle):**
+
+```toml
+version = 2
+created_at = "2026-02-07T10:30:00"
+updated_at = "2026-02-07T10:30:00"
+state = "CA"
+
+[[vehicles]]
+nickname = "Honda"
+is_default = true
+added_at = "2026-02-07T10:30:00"
+
+[vehicles.vehicle]
+plate = "8ABC123"
+vin_last5 = "12345"
+
+[[vehicles]]
+nickname = "Tesla"
+is_default = false
+added_at = "2026-03-15T09:00:00"
+
+[vehicles.vehicle]
+plate = "7XYZ999"
+vin_last5 = "67890"
 
 [owner]
 full_name = "Jane Doe"
@@ -310,9 +412,28 @@ Config schema versioning supports future migrations:
 
 ```python
 MIGRATIONS = {
-    1: lambda config: config,  # Initial version
-    2: lambda config: {**config, "new_field": "default"},  # Example
+    1: lambda config: config,  # Initial version (no-op)
+    2: _migrate_v1_to_v2,      # Single vehicle → vehicle list
 }
+
+def _migrate_v1_to_v2(config: dict) -> dict:
+    """Migrate v1 (single vehicle) to v2 (multi-vehicle).
+
+    Wraps the single vehicle in a vehicles list, sets it as default.
+    """
+    vehicle = config.pop("vehicle", None)
+    if vehicle:
+        config["vehicles"] = [
+            {
+                "vehicle": vehicle,
+                "nickname": None,
+                "is_default": True,
+                "added_at": config.get("created_at", datetime.now().isoformat()),
+            }
+        ]
+    else:
+        config["vehicles"] = []
+    return config
 
 def migrate_config(config: dict) -> dict:
     """Apply migrations up to current version."""
@@ -322,3 +443,5 @@ def migrate_config(config: dict) -> dict:
         config["version"] = version
     return config
 ```
+
+**Migration is automatic and transparent** — when a v1 config is loaded by v2 code, the migration runs on load and re-saves the new format.

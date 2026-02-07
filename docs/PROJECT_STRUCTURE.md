@@ -24,6 +24,7 @@ faaadmv/
 │       │   ├── commands/          # Command implementations
 │       │   │   ├── __init__.py
 │       │   │   ├── register.py    # faaadmv register
+│       │   │   ├── vehicles.py    # faaadmv vehicles (planned)
 │       │   │   ├── status.py      # faaadmv status
 │       │   │   └── renew.py       # faaadmv renew
 │       │   ├── ui.py              # Rich console helpers

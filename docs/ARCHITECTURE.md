@@ -7,9 +7,9 @@ faaadmv is a layered CLI application that automates DMV vehicle registration ren
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           CLI Layer (Typer + Rich)                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  register   │  │   status    │  │    renew    │  │    help     │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│  │ register │ │ vehicles │ │  status  │ │  renew   │ │   help   │     │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘     │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -132,9 +132,24 @@ Exception Hierarchy:
 
 The application is **stateless between invocations**. All persistent state is stored in:
 
-1. **Config file** (`~/.config/faaadmv/config.enc`) - Encrypted user data
+1. **Config file** (`~/.config/faaadmv/config.enc`) - Encrypted user data (owner, vehicles)
 2. **OS Keychain** - Payment credentials (CC, CVV)
 3. **Browser context** - Session cookies (ephemeral, per-run)
+
+### Vehicle Resolution (planned — multi-vehicle)
+
+When a command needs a vehicle, it resolves in this order:
+
+```
+--plate flag provided?
+  └─ Yes → Use that vehicle (error if not found)
+  └─ No  → How many vehicles registered?
+              └─ 0 → Error: "Run faaadmv register first"
+              └─ 1 → Use the only vehicle
+              └─ 2+ → Is there a default?
+                        └─ Yes → Use default
+                        └─ No  → Interactive picker prompt
+```
 
 ## Security Boundaries
 
@@ -161,6 +176,7 @@ The application is **stateless between invocations**. All persistent state is st
 ## Extensibility Points
 
 1. **New States**: Implement `BaseProvider` subclass
-2. **New CAPTCHA Solvers**: Add solver to `captcha.py` strategy chain
-3. **New Storage Backends**: Implement `ConfigBackend` protocol
-4. **Custom UI Themes**: Extend Rich theme in `ui.py`
+2. **New Vehicles**: Add/remove via `faaadmv vehicles` (planned)
+3. **New CAPTCHA Solvers**: Add solver to `captcha.py` strategy chain
+4. **New Storage Backends**: Implement `ConfigBackend` protocol
+5. **Custom UI Themes**: Extend Rich theme in `ui.py`
