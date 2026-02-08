@@ -198,7 +198,7 @@ class FaaadmvREPL:
         """Display the menu."""
         console.print()
         for key, action in actions.items():
-            console.print(f"  [bold cyan][{key}][/bold cyan] {action['label']}")
+            console.print(f"  [bold cyan]\\[{key}][/bold cyan] {action['label']}")
         console.print()
 
     # --- Vehicle selection ---
