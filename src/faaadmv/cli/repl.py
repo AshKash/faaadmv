@@ -155,6 +155,10 @@ class FaaadmvREPL:
                 "label": "Renew registration",
                 "handler": self._action_renew,
             }
+            actions["d"] = {
+                "label": "Renew (dry-run)",
+                "handler": self._action_renew_dry_run,
+            }
 
         actions["a"] = {
             "label": "Add a vehicle",
@@ -162,7 +166,7 @@ class FaaadmvREPL:
         }
 
         if has_vehicles and len(self.config.vehicles) > 1:
-            actions["d"] = {
+            actions["m"] = {
                 "label": "Set default vehicle",
                 "handler": self._action_set_default,
             }
@@ -459,6 +463,32 @@ class FaaadmvREPL:
             logger.exception("Unexpected error in REPL renew")
             console.print(error_panel("Unexpected error.", str(e)))
 
+    def _action_renew_dry_run(self) -> None:
+        """Run renewal flow without payment."""
+        entry = self._pick_vehicle()
+        if not entry:
+            return
+
+        console.print()
+        console.print(f"  Dry-run renewal for [bold]{entry.vehicle.plate}[/bold]...")
+        console.print()
+        logger.info("REPL dry-run renew: plate=%s", entry.vehicle.plate)
+
+        try:
+            asyncio.run(
+                self._run_renewal(entry.vehicle, dry_run=True)
+            )
+        except CaptchaDetectedError:
+            console.print(error_panel(
+                "CAPTCHA detected.",
+                "Enable Watch mode (w) to solve manually.",
+            ))
+        except (DMVError, FaaadmvError) as e:
+            console.print(error_panel(e.message, e.details))
+        except Exception as e:
+            logger.exception("Unexpected error in REPL dry-run renew")
+            console.print(error_panel("Unexpected error.", str(e)))
+
     # --- Async operations ---
 
     async def _check_status(self, plate: str, vin_last5: str) -> RegistrationStatus:
@@ -481,13 +511,13 @@ class FaaadmvREPL:
                 await self._capture_and_pause(provider, "status", plate)
                 await provider.cleanup()
 
-    async def _run_renewal(self, vehicle: VehicleInfo) -> None:
+    async def _run_renewal(self, vehicle: VehicleInfo, dry_run: bool = False) -> None:
         """Run the renewal flow."""
         state = self.config.state if self.config else "CA"
         provider_cls = get_provider(state)
         captcha_solver = CaptchaSolver()
 
-        config_with_payment = self.config.with_payment(self.payment)
+        config_with_payment = self.config.with_payment(self.payment) if self.payment else self.config
 
         headless = not self.watch
         slowmo_ms = self.slowmo_ms if self.watch else 0
@@ -515,6 +545,11 @@ class FaaadmvREPL:
                 fees = await provider.get_fee_breakdown()
 
                 self._display_fees(fees)
+
+                if dry_run:
+                    console.print()
+                    console.print(success_panel("Dry run complete. Ready to renew."))
+                    return
 
                 # Confirm payment
                 console.print()
