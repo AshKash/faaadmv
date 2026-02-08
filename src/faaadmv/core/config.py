@@ -1,6 +1,7 @@
 """Configuration management."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,10 @@ class ConfigManager:
         if config_dir:
             self._config_dir = Path(config_dir)
         else:
+            env_dir = os.environ.get("FAAADM_CONFIG_DIR")
+            if env_dir:
+                self._config_dir = Path(env_dir)
+                return
             self._config_dir = Path(
                 platformdirs.user_config_dir("faaadmv", ensure_exists=True)
             )

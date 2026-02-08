@@ -2,9 +2,13 @@
 
 import asyncio
 import logging
+import re
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import typer
+import platformdirs
 from pydantic import ValidationError
 from rich.console import Console
 from rich.panel import Panel
@@ -40,6 +44,9 @@ class FaaadmvREPL:
         self.manager = ConfigManager()
         self.config: Optional[UserConfig] = None
         self.payment: Optional[PaymentInfo] = None
+        self.watch = True
+        self.slowmo_ms = 200
+        self.pause_after_run = True
 
     def run(self) -> None:
         """Main entry point."""
@@ -129,6 +136,8 @@ class FaaadmvREPL:
                 f"{self.payment.masked_number} "
                 f"[dim](exp {self.payment.expiry_display})[/dim]"
             )
+        mode_label = "WATCH (headed)" if self.watch else "HEADLESS"
+        console.print(f"\n  [dim]Mode:[/dim] {mode_label}")
 
     # --- Menu ---
 
@@ -158,7 +167,7 @@ class FaaadmvREPL:
                 "handler": self._action_set_default,
             }
 
-        if has_vehicles and len(self.config.vehicles) > 1:
+        if has_vehicles:
             actions["x"] = {
                 "label": "Remove a vehicle",
                 "handler": self._action_remove_vehicle,
@@ -168,6 +177,13 @@ class FaaadmvREPL:
             actions["p"] = {
                 "label": "Update payment info" if self.payment else "Add payment info",
                 "handler": self._action_payment,
+            }
+
+        if has_vehicles:
+            watch_state = "on" if self.watch else "off"
+            actions["w"] = {
+                "label": f"Toggle watch mode ({watch_state})",
+                "handler": self._action_toggle_watch,
             }
 
         actions["q"] = {"label": "Quit", "handler": lambda: None}
@@ -267,10 +283,17 @@ class FaaadmvREPL:
 
         if len(self.config.vehicles) == 1:
             console.print()
-            console.print(error_panel(
-                "Cannot remove the last vehicle.",
-                "Use the register --reset command to delete all data.",
-            ))
+            if not Confirm.ask(
+                f"  Remove [bold]{entry.vehicle.plate}[/bold] and clear local config?",
+                default=False,
+            ):
+                console.print("  [dim]Cancelled.[/dim]")
+                return
+
+            self.manager.delete()
+            self.config = None
+            console.print()
+            console.print(success_panel("All vehicles removed."))
             return
 
         console.print()
@@ -314,6 +337,41 @@ class FaaadmvREPL:
                 f"Card {payment.masked_number} ({payment.card_type}) saved."
             ))
 
+    def _action_toggle_watch(self) -> None:
+        """Toggle watch mode (headed + slowmo)."""
+        self.watch = not self.watch
+        state = "ON" if self.watch else "OFF"
+        console.print()
+        console.print(f"  [dim]Watch mode is now {state}.[/dim]")
+
+    def _artifact_path(self, prefix: str) -> Path:
+        """Build a path for automation artifacts."""
+        base_dir = Path(platformdirs.user_state_dir("faaadmv", ensure_exists=True)) / "artifacts"
+        base_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return base_dir / f"{prefix}_{timestamp}.png"
+
+    async def _capture_and_pause(self, provider, label: str, plate: str) -> None:
+        """Save screenshot and optionally pause for inspection."""
+        safe_plate = re.sub(r"[^A-Za-z0-9_-]", "", plate)
+        if provider and getattr(provider, "page", None):
+            path = self._artifact_path(f"{label}_{safe_plate}")
+            try:
+                await provider.screenshot(str(path))
+                logger.debug("Saved automation screenshot: %s", path)
+            except Exception:
+                logger.exception("Failed to save automation screenshot")
+
+        if self.watch and self.pause_after_run:
+            try:
+                await asyncio.to_thread(
+                    Prompt.ask,
+                    "  Press Enter to close browser",
+                    default="",
+                )
+            except Exception:
+                logger.exception("Failed to pause for inspection")
+
     def _action_status(self) -> None:
         """Check registration status for a vehicle."""
         entry = self._pick_vehicle()
@@ -332,7 +390,7 @@ class FaaadmvREPL:
         except CaptchaDetectedError:
             console.print(error_panel(
                 "CAPTCHA detected.",
-                "Try: faaadmv status --headed",
+                "Enable Watch mode (w) to solve manually.",
             ))
         except VehicleNotFoundError as e:
             console.print(error_panel(e.message, e.details))
@@ -391,7 +449,7 @@ class FaaadmvREPL:
         except CaptchaDetectedError:
             console.print(error_panel(
                 "CAPTCHA detected.",
-                "Try: faaadmv renew --headed",
+                "Enable Watch mode (w) to solve manually.",
             ))
         except (DMVError, FaaadmvError) as e:
             console.print(error_panel(e.message, e.details))
@@ -409,7 +467,9 @@ class FaaadmvREPL:
         provider_cls = get_provider(state)
         logger.debug("Using provider: %s", provider_cls.__name__)
 
-        async with BrowserManager(headless=True) as bm:
+        headless = not self.watch
+        slowmo_ms = self.slowmo_ms if self.watch else 0
+        async with BrowserManager(headless=headless, slowmo_ms=slowmo_ms) as bm:
             provider = provider_cls(bm.context)
             await provider.initialize()
             try:
@@ -418,6 +478,7 @@ class FaaadmvREPL:
                 console.print("  [dim]Status retrieved.[/dim]")
                 return result
             finally:
+                await self._capture_and_pause(provider, "status", plate)
                 await provider.cleanup()
 
     async def _run_renewal(self, vehicle: VehicleInfo) -> None:
@@ -428,7 +489,9 @@ class FaaadmvREPL:
 
         config_with_payment = self.config.with_payment(self.payment)
 
-        async with BrowserManager(headless=True) as bm:
+        headless = not self.watch
+        slowmo_ms = self.slowmo_ms if self.watch else 0
+        async with BrowserManager(headless=headless, slowmo_ms=slowmo_ms) as bm:
             provider = provider_cls(bm.context)
             await provider.initialize()
 
@@ -440,7 +503,7 @@ class FaaadmvREPL:
                 )
 
                 if await provider.has_captcha():
-                    solved = await captcha_solver.solve(provider.page, headed=False)
+                    solved = await captcha_solver.solve(provider.page, headed=not headless)
                     if not solved:
                         raise CaptchaDetectedError()
 
@@ -475,6 +538,7 @@ class FaaadmvREPL:
                 self._display_renewal_result(result)
 
             finally:
+                await self._capture_and_pause(provider, "renew", vehicle.plate)
                 await provider.cleanup()
 
     # --- Payment collection ---

@@ -1,7 +1,7 @@
 """Abstract base provider for DMV automation."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from playwright.async_api import BrowserContext, Page
@@ -198,3 +198,27 @@ class BaseProvider(ABC):
         """Save current page as PDF."""
         if self.page:
             await self.page.pdf(path=path, format="Letter")
+
+    async def collect_fingerprint(self) -> dict[str, Any]:
+        """Collect a lightweight browser fingerprint snapshot."""
+        if not self.page:
+            return {}
+        return await self.page.evaluate(
+            """() => ({
+                webdriver: navigator.webdriver,
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                languages: navigator.languages,
+                pluginsLength: navigator.plugins ? navigator.plugins.length : 0,
+                hardwareConcurrency: navigator.hardwareConcurrency,
+                deviceMemory: navigator.deviceMemory,
+                cookieEnabled: navigator.cookieEnabled,
+                doNotTrack: navigator.doNotTrack,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                screen: {
+                    width: window.screen.width,
+                    height: window.screen.height,
+                    colorDepth: window.screen.colorDepth,
+                },
+            })"""
+        )

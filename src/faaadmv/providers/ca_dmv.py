@@ -87,10 +87,16 @@ class CADMVProvider(BaseProvider):
         await self.page.wait_for_load_state("domcontentloaded")
         logger.debug("Step 1: page loaded, title=%s url=%s", await self.page.title(), self.page.url)
 
+        # Log lightweight fingerprint for debugging bot detection
+        fingerprint = await self.collect_fingerprint()
+        if fingerprint:
+            logger.debug("Status check fingerprint: %s", fingerprint)
+
         # Check for CAPTCHA on initial page
         if await self.has_captcha():
             from faaadmv.exceptions import CaptchaDetectedError
 
+            logger.warning("CAPTCHA detected on status page")
             raise CaptchaDetectedError()
 
         await self.fill_field(selectors["status_plate_input"], plate)
@@ -98,8 +104,15 @@ class CADMVProvider(BaseProvider):
 
         # Click Continue and wait for step 2 form to appear
         # Use expect_navigation to avoid race condition with networkidle
-        async with self.page.expect_navigation(wait_until="domcontentloaded"):
+        async with self.page.expect_navigation(wait_until="domcontentloaded") as nav:
             await self.page.click(selectors["status_continue"])
+        response = await nav.value
+        if response:
+            logger.debug(
+                "Step 1 response: status=%s url=%s",
+                response.status,
+                response.url,
+            )
 
         logger.debug("Step 2: page loaded, title=%s url=%s", await self.page.title(), self.page.url)
 
@@ -111,8 +124,15 @@ class CADMVProvider(BaseProvider):
         logger.debug("Step 2: filled vin_last5=%s, clicking Continue", vin_last5)
 
         # Click Continue and wait for results page
-        async with self.page.expect_navigation(wait_until="domcontentloaded"):
+        async with self.page.expect_navigation(wait_until="domcontentloaded") as nav:
             await self.page.click(selectors["status_continue"])
+        response = await nav.value
+        if response:
+            logger.debug(
+                "Step 2 response: status=%s url=%s",
+                response.status,
+                response.url,
+            )
 
         logger.debug("Step 3: results page loaded, url=%s", self.page.url)
 
@@ -121,7 +141,13 @@ class CADMVProvider(BaseProvider):
         if vin_error:
             error_text = await vin_error.inner_text()
             if error_text.strip():
-                logger.warning("VIN not found: %s", error_text.strip())
+                logger.warning(
+                    "VIN not found: %s (url=%s title=%s)",
+                    error_text.strip(),
+                    self.page.url,
+                    await self.page.title(),
+                )
+                await self._debug_screenshot("vin_not_found")
                 raise VehicleNotFoundError(plate)
 
         # Step 3: Parse results page

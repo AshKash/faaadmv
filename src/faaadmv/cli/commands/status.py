@@ -11,7 +11,6 @@ from rich.prompt import Prompt
 
 from faaadmv.cli.ui import error_panel
 from faaadmv.core.browser import BrowserManager
-from faaadmv.core.captcha import CaptchaSolver
 from faaadmv.core.config import ConfigManager
 from faaadmv.exceptions import (
     BrowserError,

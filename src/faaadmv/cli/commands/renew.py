@@ -250,7 +250,7 @@ async def _run_renewal(
             _display_result(result)
 
         finally:
-            await provider.cleanup()
+                await provider.cleanup()
 
 
 def _step(message: str, current: int, total: int) -> None:

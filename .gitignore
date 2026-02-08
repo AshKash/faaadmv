@@ -45,6 +45,13 @@ htmlcov/
 *.enc
 *.pdf
 dmv_receipt_*.pdf
+dmv_debug_*.png
+dmv_debug_*.pdf
+dmv_debug_*.html
+dmv_debug_*.txt
+dmv_debug_*.json
+artifacts/
+*.log
 
 # Playwright MCP logs
 .playwright-mcp/

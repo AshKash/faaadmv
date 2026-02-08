@@ -74,7 +74,12 @@ def status(
     setup_logging()
     from faaadmv.cli.commands.status import run_status
 
-    run_status(headed=headed, verbose=verbose, plate=plate, all_vehicles=all_vehicles)
+    run_status(
+        headed=headed,
+        verbose=verbose,
+        plate=plate,
+        all_vehicles=all_vehicles,
+    )
 
 
 @app.command()
@@ -105,7 +110,12 @@ def renew(
     setup_logging()
     from faaadmv.cli.commands.renew import run_renew
 
-    run_renew(dry_run=dry_run, headed=headed, verbose=verbose, plate=plate)
+    run_renew(
+        dry_run=dry_run,
+        headed=headed,
+        verbose=verbose,
+        plate=plate,
+    )
 
 
 if __name__ == "__main__":

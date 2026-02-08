@@ -24,12 +24,20 @@ def setup_logging() -> None:
         return
 
     # File handler — detailed debug logging
-    fh = logging.FileHandler(log_file, encoding="utf-8")
+    try:
+        fh = logging.FileHandler(log_file, encoding="utf-8")
+    except OSError:
+        # If we can't write to the default log dir (common in sandboxed tests),
+        # skip file logging rather than crashing the CLI.
+        logger.addHandler(logging.NullHandler())
+        return
     fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    fh.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     logger.addHandler(fh)
 
     logger.debug("Logging initialized → %s", log_file)

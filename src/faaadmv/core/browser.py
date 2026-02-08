@@ -37,6 +37,11 @@ class BrowserManager:
         self,
         headless: bool = True,
         timeout: int = DEFAULT_TIMEOUT,
+        slowmo_ms: int = 0,
+        locale: str = "en-US",
+        timezone_id: str = "America/Los_Angeles",
+        user_agent: Optional[str] = None,
+        stealth: bool = True,
     ) -> None:
         """Initialize browser manager.
 
@@ -46,6 +51,11 @@ class BrowserManager:
         """
         self.headless = headless
         self.timeout = timeout
+        self.slowmo_ms = slowmo_ms
+        self.locale = locale
+        self.timezone_id = timezone_id
+        self.user_agent = user_agent
+        self.stealth = stealth
         self._playwright = None
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
@@ -59,23 +69,34 @@ class BrowserManager:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=self.headless,
+            slow_mo=self.slowmo_ms,
             args=[
                 "--disable-extensions",
-                "--disable-plugins",
                 "--disable-sync",
                 "--no-first-run",
                 "--disable-blink-features=AutomationControlled",
             ],
         )
 
-        self._context = await self._browser.new_context(
-            viewport=self.DEFAULT_VIEWPORT,
-            user_agent=self.DEFAULT_USER_AGENT,
-            ignore_https_errors=False,
-            java_script_enabled=True,
-        )
+        context_kwargs = {
+            "viewport": self.DEFAULT_VIEWPORT,
+            "locale": self.locale,
+            "timezone_id": self.timezone_id,
+            "extra_http_headers": {
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            "ignore_https_errors": False,
+            "java_script_enabled": True,
+        }
+        if self.user_agent:
+            context_kwargs["user_agent"] = self.user_agent
+
+        self._context = await self._browser.new_context(**context_kwargs)
 
         self._context.set_default_timeout(self.timeout)
+
+        if self.stealth:
+            await self._context.add_init_script(_stealth_init_script())
 
         # Block analytics/tracking
         for pattern in self.BLOCKED_PATTERNS:
@@ -130,3 +151,13 @@ class BrowserManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit — always cleanup."""
         await self.close()
+
+
+def _stealth_init_script() -> str:
+    return """
+// Minimal stealth patches to reduce obvious automation signals.
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+window.chrome = window.chrome || { runtime: {} };
+"""
