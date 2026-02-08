@@ -101,7 +101,8 @@ def run_renew(
 
     if verbose:
         console.print(f"[dim]    Vehicle: {selected_vehicle.plate} / {selected_vehicle.masked_vin}[/dim]")
-        console.print(f"[dim]    Owner: {config.owner.full_name}[/dim]")
+        if config.owner:
+            console.print(f"[dim]    Owner: {config.owner.full_name}[/dim]")
         if payment:
             console.print(f"[dim]    Card: {payment.masked_number} ({payment.card_type})[/dim]")
 

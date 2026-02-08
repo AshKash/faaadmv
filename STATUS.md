@@ -63,9 +63,29 @@
 
 | Feature | Status | Test Hints |
 |---------|--------|------------|
-| `--version` flag | testable | `runner.invoke(app, ["--version"])` output contains `"faaadmv v0.1.0"`. |
-| `--help` / no args | testable | `runner.invoke(app, [])` shows help text with `register`, `status`, `renew`. |
-| Command routing | testable | `register`, `status`, `renew` are valid subcommands (appear in help). |
+| `--version` flag | testable | `runner.invoke(app, ["--version"])` output contains `"0.1.0"`. |
+| No args enters REPL | testable | `runner.invoke(app, [], input="q\n")` — output contains `"faaadmv"`. Does NOT show help text. |
+| `--help` flag | testable | `runner.invoke(app, ["--help"])` exit code 0, output contains `register`, `status`, `vehicles`, `renew`. |
+| Command routing | testable | `register`, `status`, `vehicles`, `renew` are valid subcommands (appear in help). |
+| Invalid command | testable | `runner.invoke(app, ["invalid_command"])` exit code != 0. |
+
+## Interactive REPL (`src/faaadmv/cli/repl.py`)
+
+| Feature | Status | Test Hints |
+|---------|--------|------------|
+| REPL starts with no args | testable | `runner.invoke(app, [], input="q\n")` enters REPL, shows dashboard. |
+| No config: shows "Add a vehicle" | testable | Fresh state (no config), REPL shows "No vehicles registered" and "Add a vehicle" option. |
+| Quit with "q" | testable | Input `"q\n"` exits cleanly with "Goodbye" message. |
+| Add vehicle flow | testable | In REPL, input `"a\n8ABC123\n12345\n\ntest1234\ntest1234\nq\n"` → adds vehicle, shows "Vehicle 8ABC123 added". Mock `ConfigManager` to use `tmp_path`. |
+| Dashboard shows vehicles | testable | After adding vehicle, dashboard lists plate numbers. Default vehicle marked with star. |
+| Dashboard masks payment | testable | If payment stored in keychain, dashboard shows `****XXXX` masked card number. |
+| Status check from REPL | testable | With registered vehicle, "s" action queries DMV portal via async provider. Mock provider for unit tests. |
+| Renew from REPL | testable | With registered vehicle, "r" action checks for payment, shows eligibility/fees, confirms payment. Lazy: only asks for CC when renewing. Mock provider. |
+| Lazy payment collection | testable | Renew prompts for payment only if not already stored. Collected inline, saved to keychain. |
+| Remove vehicle | testable | With 2+ vehicles, "d" action removes selected vehicle with confirmation. Cannot remove last vehicle. |
+| Set default vehicle | testable | With 2+ vehicles, "f" action sets default. Already-default shows info message. |
+| Vehicle picker (multi) | testable | With 2+ vehicles, actions requiring vehicle selection show numbered list. |
+| Session passphrase caching | testable | Passphrase prompted once on session load, reused for subsequent saves without re-prompting. |
 
 ## UI Helpers (`src/faaadmv/cli/ui.py`)
 

@@ -106,8 +106,8 @@ def run_register(
         owner = _build_owner(owner_data, existing_config)
         payment = _build_payment(payment_data)
 
-        if vehicle is None or owner is None:
-            console.print(error_panel("Missing required information."))
+        if vehicle is None:
+            console.print(error_panel("Missing required vehicle information."))
             raise typer.Exit(1)
 
         if vehicle_only and existing_config:
@@ -206,10 +206,13 @@ def _handle_verify() -> None:
     table.add_column("Value")
 
     table.add_row("Vehicle", f"{config.vehicle.plate} / {config.vehicle.masked_vin}")
-    table.add_row("Owner", config.owner.full_name)
-    table.add_row("Phone", config.owner.formatted_phone)
-    table.add_row("Email", config.owner.masked_email)
-    table.add_row("Address", config.owner.address.formatted)
+    if config.owner:
+        table.add_row("Owner", config.owner.full_name)
+        table.add_row("Phone", config.owner.formatted_phone)
+        table.add_row("Email", config.owner.masked_email)
+        table.add_row("Address", config.owner.address.formatted)
+    else:
+        table.add_row("Owner", "[dim]Not set[/dim]")
 
     if payment:
         table.add_row("Card", f"{payment.masked_number} (exp {payment.expiry_display})")

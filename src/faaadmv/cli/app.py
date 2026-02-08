@@ -10,7 +10,7 @@ from faaadmv import __version__
 app = typer.Typer(
     name="faaadmv",
     help="Renew your vehicle registration from the command line.",
-    no_args_is_help=True,
+    no_args_is_help=False,
     rich_markup_mode="rich",
 )
 
@@ -31,6 +31,12 @@ def main(
     if version:
         console.print(f"faaadmv v{__version__}")
         raise typer.Exit()
+
+    # No subcommand → enter interactive REPL
+    if ctx.invoked_subcommand is None:
+        from faaadmv.cli.repl import run_repl
+
+        run_repl()
 
 
 @app.command()

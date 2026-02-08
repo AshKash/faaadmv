@@ -9,12 +9,10 @@ runner = CliRunner()
 
 
 class TestCLIEntryPoints:
-    def test_no_args_shows_help(self):
-        """no_args_is_help=True causes exit code 2 (standard Click/Typer behavior)."""
-        result = runner.invoke(app, [])
-        # Typer/Click returns exit code 2 for "missing required" / help-shown
-        assert result.exit_code == 2
-        assert "Usage" in result.output
+    def test_no_args_enters_repl(self):
+        """No args enters the interactive REPL."""
+        result = runner.invoke(app, [], input="q\n")
+        assert "faaadmv" in result.output
 
     def test_version_flag(self):
         result = runner.invoke(app, ["--version"])
@@ -110,6 +108,44 @@ class TestRenewCommand:
         result = runner.invoke(app, ["renew", "--dry-run"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output
+
+
+class TestREPL:
+    def test_repl_no_config_shows_add_option(self):
+        """REPL with no config shows 'Add a vehicle' option."""
+        result = runner.invoke(app, [], input="q\n")
+        assert "No vehicles registered" in result.output
+        assert "Add a vehicle" in result.output
+
+    def test_repl_quit(self):
+        """REPL exits cleanly on 'q'."""
+        result = runner.invoke(app, [], input="q\n")
+        assert "Goodbye" in result.output
+
+    def test_repl_add_vehicle_flow(self, tmp_path, mock_keyring):
+        """REPL: add vehicle → shows in dashboard."""
+        from unittest.mock import patch
+
+        config_dir = tmp_path / ".config" / "faaadmv"
+        with patch("faaadmv.cli.repl.ConfigManager") as MockCM:
+            from faaadmv.core.config import ConfigManager
+            real_manager = ConfigManager(config_dir=config_dir)
+            MockCM.return_value = real_manager
+
+            # Add vehicle flow: a → plate → vin → nickname → passphrase → confirm → q
+            result = runner.invoke(app, [], input="\n".join([
+                "a",            # add vehicle
+                "8ABC123",      # plate
+                "12345",        # VIN
+                "",             # nickname (skip)
+                "test1234",     # passphrase
+                "test1234",     # confirm
+                "q",            # quit
+            ]))
+
+        assert result.exit_code == 0, f"REPL failed: {result.output}"
+        assert "8ABC123" in result.output
+        assert "Vehicle 8ABC123 added" in result.output
 
 
 class TestVehiclesCommand:

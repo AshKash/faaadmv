@@ -26,8 +26,8 @@ class UserConfig(BaseModel):
         description="Registered vehicles",
     )
 
-    # Owner info — shared across all vehicles
-    owner: OwnerInfo
+    # Owner info — optional, only needed if DMV requires it
+    owner: Optional[OwnerInfo] = None
 
     # Payment stored separately in keychain, populated at runtime
     # Excluded from serialization
@@ -148,11 +148,13 @@ class UserConfig(BaseModel):
     def summary(self) -> dict[str, str]:
         """Return summary dict for display."""
         default = self.default_vehicle
-        return {
+        result = {
             "plate": default.vehicle.plate,
             "vin": default.vehicle.masked_vin,
-            "owner": self.owner.full_name,
-            "email": self.owner.masked_email,
             "state": self.state,
             "vehicles": str(len(self.vehicles)),
         }
+        if self.owner:
+            result["owner"] = self.owner.full_name
+            result["email"] = self.owner.masked_email
+        return result
