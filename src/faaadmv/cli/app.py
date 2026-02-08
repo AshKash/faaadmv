@@ -6,6 +6,7 @@ import typer
 from rich.console import Console
 
 from faaadmv import __version__
+from faaadmv.logging import setup_logging
 
 app = typer.Typer(
     name="faaadmv",
@@ -28,6 +29,8 @@ def main(
     ),
 ) -> None:
     """faaadmv - Agentic DMV registration renewal CLI."""
+    setup_logging()
+
     if version:
         console.print(f"faaadmv v{__version__}")
         raise typer.Exit()
@@ -47,6 +50,7 @@ def register(
     reset: bool = typer.Option(False, "--reset", help="Reset all saved data"),
 ) -> None:
     """Set up or update your vehicle and payment information."""
+    setup_logging()
     from faaadmv.cli.commands.register import run_register
 
     run_register(
@@ -67,6 +71,7 @@ def status(
     all_vehicles: bool = typer.Option(False, "--all", help="Check all registered vehicles"),
 ) -> None:
     """Check your current registration status."""
+    setup_logging()
     from faaadmv.cli.commands.status import run_status
 
     run_status(headed=headed, verbose=verbose, plate=plate, all_vehicles=all_vehicles)
@@ -79,6 +84,7 @@ def vehicles(
     default: str = typer.Option(None, "--default", help="Set default vehicle by plate"),
 ) -> None:
     """Manage registered vehicles."""
+    setup_logging()
     from faaadmv.cli.commands.vehicles import run_vehicles
 
     run_vehicles(add=add, remove=remove, default=default)
@@ -96,6 +102,7 @@ def renew(
     plate: str = typer.Option(None, "--plate", help="Renew specific vehicle by plate"),
 ) -> None:
     """Renew your vehicle registration."""
+    setup_logging()
     from faaadmv.cli.commands.renew import run_renew
 
     run_renew(dry_run=dry_run, headed=headed, verbose=verbose, plate=plate)

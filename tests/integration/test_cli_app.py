@@ -123,7 +123,7 @@ class TestREPL:
         assert "Goodbye" in result.output
 
     def test_repl_add_vehicle_flow(self, tmp_path, mock_keyring):
-        """REPL: add vehicle → shows in dashboard."""
+        """REPL: add vehicle -> shows in dashboard."""
         from unittest.mock import patch
 
         config_dir = tmp_path / ".config" / "faaadmv"
@@ -132,14 +132,12 @@ class TestREPL:
             real_manager = ConfigManager(config_dir=config_dir)
             MockCM.return_value = real_manager
 
-            # Add vehicle flow: a → plate → vin → nickname → passphrase → confirm → q
+            # Add vehicle flow: a -> plate -> vin -> nickname -> q
             result = runner.invoke(app, [], input="\n".join([
                 "a",            # add vehicle
                 "8ABC123",      # plate
                 "12345",        # VIN
                 "",             # nickname (skip)
-                "test1234",     # passphrase
-                "test1234",     # confirm
                 "q",            # quit
             ]))
 

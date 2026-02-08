@@ -1,5 +1,6 @@
 """California DMV provider implementation."""
 
+import logging
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -23,6 +24,8 @@ from faaadmv.models import (
     UserConfig,
 )
 from faaadmv.providers.base import BaseProvider
+
+logger = logging.getLogger(__name__)
 
 
 class CADMVProvider(BaseProvider):
@@ -79,8 +82,10 @@ class CADMVProvider(BaseProvider):
         selectors = self.get_selectors()
 
         # Step 1: Navigate to status page and enter plate
+        logger.info("Status check: navigating to %s", self.STATUS_URL)
         await self.page.goto(self.STATUS_URL)
-        await self.wait_for_navigation()
+        await self.page.wait_for_load_state("domcontentloaded")
+        logger.debug("Step 1: page loaded, title=%s url=%s", await self.page.title(), self.page.url)
 
         # Check for CAPTCHA on initial page
         if await self.has_captcha():
@@ -89,20 +94,34 @@ class CADMVProvider(BaseProvider):
             raise CaptchaDetectedError()
 
         await self.fill_field(selectors["status_plate_input"], plate)
-        await self.click_and_wait(selectors["status_continue"])
+        logger.debug("Step 1: filled plate=%s, clicking Continue", plate)
 
-        # Step 2: Enter VIN
+        # Click Continue and wait for step 2 form to appear
+        # Use expect_navigation to avoid race condition with networkidle
+        async with self.page.expect_navigation(wait_until="domcontentloaded"):
+            await self.page.click(selectors["status_continue"])
+
+        logger.debug("Step 2: page loaded, title=%s url=%s", await self.page.title(), self.page.url)
+
+        # Step 2: Wait for VIN input to appear and fill it
         await self.page.wait_for_selector(
-            selectors["status_vin_input"], state="visible", timeout=10000
+            selectors["status_vin_input"], state="visible", timeout=15000
         )
         await self.fill_field(selectors["status_vin_input"], vin_last5)
-        await self.click_and_wait(selectors["status_continue"])
+        logger.debug("Step 2: filled vin_last5=%s, clicking Continue", vin_last5)
+
+        # Click Continue and wait for results page
+        async with self.page.expect_navigation(wait_until="domcontentloaded"):
+            await self.page.click(selectors["status_continue"])
+
+        logger.debug("Step 3: results page loaded, url=%s", self.page.url)
 
         # Check for "VIN/HIN NOT FOUND" error (stays on step 2)
         vin_error = await self.page.query_selector(selectors["status_vin_not_found"])
         if vin_error:
             error_text = await vin_error.inner_text()
             if error_text.strip():
+                logger.warning("VIN not found: %s", error_text.strip())
                 raise VehicleNotFoundError(plate)
 
         # Step 3: Parse results page

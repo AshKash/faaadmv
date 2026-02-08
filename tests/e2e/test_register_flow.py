@@ -1,4 +1,4 @@
-"""E2E test: full register → verify → reset flow.
+"""E2E test: full register -> verify -> reset flow.
 
 This is the P0 happy path. If this doesn't work, nothing works.
 """
@@ -29,8 +29,6 @@ REGISTER_INPUT = "\n".join([
     "27",                # exp year
     "123",               # cvv
     "90001",             # billing zip
-    "testpass1234",      # passphrase
-    "testpass1234",      # confirm passphrase
 ])
 
 # Simulated user input for registration without payment
@@ -45,8 +43,6 @@ REGISTER_INPUT_NO_PAYMENT = "\n".join([
     "CA",                # state
     "90001",             # zip
     "n",                 # no payment
-    "testpass1234",      # passphrase
-    "testpass1234",      # confirm passphrase
 ])
 
 
@@ -54,7 +50,7 @@ class TestRegisterFlow:
     """P0: Can a user register, verify, and reset?"""
 
     def test_full_register_saves_config(self, tmp_path, mock_keyring):
-        """Core flow: faaadmv register with all fields → config saved."""
+        """Core flow: faaadmv register with all fields -> config saved."""
         config_dir = tmp_path / ".config" / "faaadmv"
 
         with patch("faaadmv.cli.commands.register.ConfigManager") as MockCM:
@@ -75,14 +71,14 @@ class TestRegisterFlow:
         assert real_manager.exists, "Config file was not created on disk"
 
         # Verify we can load it back
-        loaded = real_manager.load("testpass1234")
+        loaded = real_manager.load()
         assert loaded.vehicle.plate == "8ABC123"
         assert loaded.vehicle.vin_last5 == "12345"
         assert loaded.owner.full_name == "Jane Doe"
         assert loaded.owner.email == "jane@example.com"
 
     def test_register_then_verify(self, tmp_path, mock_keyring):
-        """Core flow: register → verify shows saved data."""
+        """Core flow: register -> verify shows saved data."""
         config_dir = tmp_path / ".config" / "faaadmv"
 
         with patch("faaadmv.cli.commands.register.ConfigManager") as MockCM:
@@ -97,7 +93,6 @@ class TestRegisterFlow:
             result = runner.invoke(
                 app,
                 ["register", "--verify"],
-                input="testpass1234\n",
             )
 
         print("VERIFY OUTPUT:", result.output)
@@ -111,7 +106,7 @@ class TestRegisterFlow:
         assert "All fields valid" in result.output
 
     def test_register_then_reset(self, tmp_path, mock_keyring):
-        """Core flow: register → reset deletes everything."""
+        """Core flow: register -> reset deletes everything."""
         config_dir = tmp_path / ".config" / "faaadmv"
 
         with patch("faaadmv.cli.commands.register.ConfigManager") as MockCM:
@@ -136,7 +131,7 @@ class TestRegisterFlow:
         assert not real_manager.exists, "Config file still exists after reset"
 
     def test_register_without_payment(self, tmp_path, mock_keyring):
-        """Register without payment info — should still succeed."""
+        """Register without payment info -- should still succeed."""
         config_dir = tmp_path / ".config" / "faaadmv"
 
         with patch("faaadmv.cli.commands.register.ConfigManager") as MockCM:
@@ -148,28 +143,6 @@ class TestRegisterFlow:
         assert result.exit_code == 0, f"Register failed: {result.output}"
         assert "Configuration saved" in result.output
 
-        loaded = real_manager.load("testpass1234")
+        loaded = real_manager.load()
         assert loaded.vehicle.plate == "8ABC123"
         assert loaded.owner.full_name == "Jane Doe"
-
-    def test_verify_wrong_passphrase(self, tmp_path, mock_keyring):
-        """Verify with wrong passphrase gives clear error."""
-        config_dir = tmp_path / ".config" / "faaadmv"
-
-        with patch("faaadmv.cli.commands.register.ConfigManager") as MockCM:
-            real_manager = ConfigManager(config_dir=config_dir)
-            MockCM.return_value = real_manager
-
-            # Register
-            result = runner.invoke(app, ["register"], input=REGISTER_INPUT)
-            assert result.exit_code == 0
-
-            # Verify with wrong pass
-            result = runner.invoke(
-                app,
-                ["register", "--verify"],
-                input="wrongpassword\n",
-            )
-
-        assert result.exit_code == 1
-        assert "passphrase" in result.output.lower() or "Wrong" in result.output

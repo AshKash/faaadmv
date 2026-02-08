@@ -1,5 +1,6 @@
 """Register command implementation."""
 
+import logging
 from typing import Optional
 
 import typer
@@ -12,11 +13,12 @@ from rich.table import Table
 from faaadmv.cli.ui import error_panel, success_panel
 from faaadmv.core.config import ConfigManager
 from faaadmv.core.keychain import PaymentKeychain
-from faaadmv.exceptions import ConfigDecryptionError, ConfigNotFoundError
+from faaadmv.exceptions import ConfigNotFoundError
 from faaadmv.models import UserConfig, VehicleEntry, VehicleInfo
 from faaadmv.models.owner import Address, OwnerInfo
 from faaadmv.models.payment import PaymentInfo
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -37,17 +39,14 @@ def run_register(
 
     manager = ConfigManager()
     existing_config: Optional[UserConfig] = None
-    existing_passphrase: Optional[str] = None
 
     # For partial updates, load existing config first
     if (vehicle_only or payment_only) and manager.exists:
-        console.print()
-        existing_passphrase = Prompt.ask("  Enter your passphrase", password=True)
         try:
-            existing_config = manager.load(existing_passphrase)
-        except ConfigDecryptionError:
+            existing_config = manager.load()
+        except Exception as e:
             console.print()
-            console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
+            console.print(error_panel("Failed to load configuration.", str(e)))
             raise typer.Exit(1)
     elif vehicle_only or payment_only:
         console.print()
@@ -114,7 +113,6 @@ def run_register(
             # Add/update vehicle in existing config
             existing_entry = existing_config.get_vehicle(vehicle.plate)
             if existing_entry:
-                # Update existing vehicle (replace VehicleInfo)
                 new_vehicles = []
                 for v in existing_config.vehicles:
                     if v.vehicle.plate == vehicle.plate:
@@ -123,7 +121,6 @@ def run_register(
                         new_vehicles.append(v)
                 config = existing_config.model_copy(update={"vehicles": new_vehicles})
             else:
-                # Add as new vehicle
                 nickname = Prompt.ask("  Nickname (optional)", default="")
                 nickname = nickname.strip() or None
                 make_default = Confirm.ask("  Set as default?", default=False)
@@ -137,21 +134,15 @@ def run_register(
                 owner=owner,
             )
 
-        # Get passphrase
-        if existing_passphrase:
-            passphrase = existing_passphrase
-        else:
-            passphrase = _prompt_passphrase()
-
         # Save config
-        manager.save(config, passphrase)
+        manager.save(config)
 
         # Save payment to keychain
         if payment:
             PaymentKeychain.store(payment)
 
         console.print()
-        console.print(success_panel("Configuration saved securely."))
+        console.print(success_panel("Configuration saved."))
         console.print()
         console.print("[dim]Run 'faaadmv status' to check your registration.[/dim]")
 
@@ -189,15 +180,7 @@ def _handle_verify() -> None:
         ))
         raise typer.Exit(1)
 
-    passphrase = Prompt.ask("  Enter your passphrase", password=True)
-
-    try:
-        config = manager.load(passphrase)
-    except ConfigDecryptionError:
-        console.print()
-        console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
-        raise typer.Exit(1)
-
+    config = manager.load()
     payment = PaymentKeychain.retrieve()
 
     # Build display table
@@ -366,7 +349,6 @@ def _build_vehicle(
     data: Optional[dict],
     existing: Optional[UserConfig],
 ) -> Optional[VehicleInfo]:
-    """Build VehicleInfo from collected data or existing config."""
     if data:
         return VehicleInfo(**data)
     if existing:
@@ -378,7 +360,6 @@ def _build_owner(
     data: Optional[dict],
     existing: Optional[UserConfig],
 ) -> Optional[OwnerInfo]:
-    """Build OwnerInfo from collected data or existing config."""
     if data:
         return OwnerInfo(**data)
     if existing:
@@ -387,32 +368,6 @@ def _build_owner(
 
 
 def _build_payment(data: Optional[dict]) -> Optional[PaymentInfo]:
-    """Build PaymentInfo from collected data."""
     if data:
         return PaymentInfo(**data)
     return None
-
-
-def _prompt_passphrase() -> str:
-    """Prompt for a new passphrase with confirmation."""
-    console.print("[bold cyan]--- Security ---[/bold cyan]")
-    console.print()
-    console.print("[dim]  Choose a passphrase to encrypt your configuration.[/dim]")
-    console.print("[dim]  You'll need this passphrase for status checks and renewals.[/dim]")
-    console.print()
-
-    while True:
-        passphrase = Prompt.ask("  Passphrase", password=True)
-
-        if len(passphrase) < 4:
-            console.print("  [red]Passphrase must be at least 4 characters.[/red]")
-            continue
-
-        confirm = Prompt.ask("  Confirm passphrase", password=True)
-
-        if passphrase != confirm:
-            console.print("  [red]Passphrases don't match. Try again.[/red]")
-            console.print()
-            continue
-
-        return passphrase

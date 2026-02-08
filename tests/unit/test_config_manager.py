@@ -3,7 +3,7 @@
 import pytest
 
 from faaadmv.core.config import ConfigManager
-from faaadmv.exceptions import ConfigDecryptionError, ConfigNotFoundError
+from faaadmv.exceptions import ConfigNotFoundError
 from faaadmv.models.config import UserConfig
 from faaadmv.models.owner import Address, OwnerInfo
 from faaadmv.models.vehicle import VehicleEntry, VehicleInfo
@@ -33,43 +33,30 @@ def sample_config():
 class TestConfigManager:
     def test_save_and_load(self, temp_config_dir, sample_config):
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="test123")
-        loaded = manager.load(passphrase="test123")
+        manager.save(sample_config)
+        loaded = manager.load()
         assert loaded.vehicle.plate == "8ABC123"
         assert loaded.owner.full_name == "Jane Doe"
 
     def test_config_file_created(self, temp_config_dir, sample_config):
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="test123")
+        manager.save(sample_config)
         assert manager.config_path.exists()
-
-    def test_config_file_encrypted(self, temp_config_dir, sample_config):
-        manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="test123")
-        contents = manager.config_path.read_bytes()
-        assert b"Jane Doe" not in contents
-        assert b"8ABC123" not in contents
 
     def test_exists_property(self, temp_config_dir, sample_config):
         manager = ConfigManager(config_dir=temp_config_dir)
         assert manager.exists is False
-        manager.save(sample_config, passphrase="test123")
+        manager.save(sample_config)
         assert manager.exists is True
-
-    def test_wrong_passphrase(self, temp_config_dir, sample_config):
-        manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="correct")
-        with pytest.raises(ConfigDecryptionError):
-            manager.load(passphrase="wrong")
 
     def test_config_not_found(self, temp_config_dir):
         manager = ConfigManager(config_dir=temp_config_dir)
         with pytest.raises(ConfigNotFoundError):
-            manager.load(passphrase="any")
+            manager.load()
 
     def test_delete_existing(self, temp_config_dir, sample_config):
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="test123")
+        manager.save(sample_config)
         assert manager.delete() is True
         assert manager.exists is False
 
@@ -79,7 +66,7 @@ class TestConfigManager:
 
     def test_overwrite_config(self, temp_config_dir, sample_config):
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="pass1")
+        manager.save(sample_config)
 
         # Update and re-save
         new_config = UserConfig(
@@ -89,15 +76,15 @@ class TestConfigManager:
             )],
             owner=sample_config.owner,
         )
-        manager.save(new_config, passphrase="pass2")
+        manager.save(new_config)
 
-        loaded = manager.load(passphrase="pass2")
+        loaded = manager.load()
         assert loaded.vehicle.plate == "NEWPLATE"
 
     def test_config_preserves_all_fields(self, temp_config_dir, sample_config):
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="test")
-        loaded = manager.load(passphrase="test")
+        manager.save(sample_config)
+        loaded = manager.load()
 
         assert loaded.vehicle.plate == sample_config.vehicle.plate
         assert loaded.vehicle.vin_last5 == sample_config.vehicle.vin_last5
@@ -113,20 +100,19 @@ class TestConfigManager:
     def test_creates_config_dir(self, tmp_path, sample_config):
         new_dir = tmp_path / "nonexistent" / "config"
         manager = ConfigManager(config_dir=new_dir)
-        manager.save(sample_config, passphrase="test")
+        manager.save(sample_config)
         assert new_dir.exists()
         assert manager.config_path.exists()
 
 
 class TestConfigMigration:
-    """Tests for v1 → v2 schema migration."""
+    """Tests for v1 -> v2 schema migration."""
 
     def test_v1_to_v2_migration(self, temp_config_dir):
         """v1 config with single vehicle migrates to v2 vehicle list."""
         import tomli_w
-        from faaadmv.core.crypto import ConfigCrypto
 
-        # Write a v1 config directly (bypassing the model which now creates v2)
+        # Write a v1 config directly as plain TOML (bypassing the model which now creates v2)
         v1_config = {
             "version": 1,
             "vehicle": {"plate": "8ABC123", "vin_last5": "12345"},
@@ -144,16 +130,14 @@ class TestConfigMigration:
             "state": "CA",
         }
 
-        toml_str = tomli_w.dumps(v1_config)
-        crypto = ConfigCrypto("testpass")
-        encrypted = crypto.encrypt(toml_str)
+        toml_bytes = tomli_w.dumps(v1_config)
 
         manager = ConfigManager(config_dir=temp_config_dir)
         temp_config_dir.mkdir(parents=True, exist_ok=True)
-        manager.config_path.write_bytes(encrypted)
+        manager.config_path.write_text(toml_bytes)
 
         # Load should migrate to v2
-        loaded = manager.load("testpass")
+        loaded = manager.load()
         assert loaded.version == 2
         assert len(loaded.vehicles) == 1
         assert loaded.vehicles[0].is_default is True
@@ -164,8 +148,8 @@ class TestConfigMigration:
     def test_v2_config_no_migration(self, temp_config_dir, sample_config):
         """v2 config loads without migration."""
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(sample_config, passphrase="test")
-        loaded = manager.load("test")
+        manager.save(sample_config)
+        loaded = manager.load()
         assert loaded.version == 2
         assert len(loaded.vehicles) == 1
         assert loaded.vehicle.plate == "8ABC123"

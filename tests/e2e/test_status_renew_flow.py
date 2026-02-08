@@ -1,6 +1,6 @@
 """E2E test: status and renew commands with mocked browser.
 
-Tests the full flow from config load → browser → provider → display.
+Tests the full flow from config load -> browser -> provider -> display.
 Browser/provider layer is mocked since we can't hit real DMV in tests.
 """
 
@@ -54,7 +54,7 @@ def saved_config(tmp_path):
             ),
         ),
     )
-    manager.save(config, passphrase="testpass")
+    manager.save(config)
     return manager
 
 
@@ -128,7 +128,7 @@ class TestStatusFlow:
     """P0: Can a user check registration status?"""
 
     def test_status_happy_path(self, saved_config, mock_status_result):
-        """register → status shows real status from DMV."""
+        """register -> status shows real status from DMV."""
         mock_provider = _make_mock_provider(mock_status_result)
         mock_bm = _make_mock_browser_manager()
 
@@ -143,7 +143,6 @@ class TestStatusFlow:
             result = runner.invoke(
                 app,
                 ["status"],
-                input="testpass\n",
             )
 
         print("STATUS OUTPUT:", result.output)
@@ -156,24 +155,12 @@ class TestStatusFlow:
         assert "2019 Honda Accord" in result.output
         assert "Current" in result.output
 
-    def test_status_wrong_passphrase(self, saved_config):
-        """Status with wrong passphrase → clear error, no crash."""
-        with patch("faaadmv.cli.commands.status.ConfigManager", return_value=saved_config):
-            result = runner.invoke(
-                app,
-                ["status"],
-                input="wrongpass\n",
-            )
-
-        assert result.exit_code == 1
-        assert "Wrong passphrase" in result.output or "passphrase" in result.output.lower()
-
 
 class TestRenewDryRunFlow:
     """P0: Can a user do a dry run of renewal?"""
 
     def test_renew_dry_run_happy_path(self, saved_config, mock_keyring, mock_eligibility, mock_fees):
-        """register → renew --dry-run shows eligibility + fees, stops before payment."""
+        """register -> renew --dry-run shows eligibility + fees, stops before payment."""
         mock_provider = _make_mock_provider(
             status_result=None,
             eligibility=mock_eligibility,
@@ -193,7 +180,6 @@ class TestRenewDryRunFlow:
             result = runner.invoke(
                 app,
                 ["renew", "--dry-run"],
-                input="testpass\n",
             )
 
         print("DRY RUN OUTPUT:", result.output)
@@ -215,7 +201,7 @@ class TestRenewFullFlow:
         self, saved_config, mock_keyring,
         mock_eligibility, mock_fees, mock_renewal_result,
     ):
-        """register → renew → confirm payment → success."""
+        """register -> renew -> confirm payment -> success."""
         mock_provider = _make_mock_provider(
             status_result=None,
             eligibility=mock_eligibility,
@@ -244,7 +230,7 @@ class TestRenewFullFlow:
             result = runner.invoke(
                 app,
                 ["renew"],
-                input="testpass\ny\n",  # passphrase + confirm payment
+                input="y\n",  # confirm payment
             )
 
         print("RENEW OUTPUT:", result.output)
@@ -261,7 +247,7 @@ class TestRenewFullFlow:
         self, saved_config, mock_keyring,
         mock_eligibility, mock_fees,
     ):
-        """User sees fees but declines → no payment made."""
+        """User sees fees but declines -> no payment made."""
         mock_provider = _make_mock_provider(
             status_result=None,
             eligibility=mock_eligibility,
@@ -289,7 +275,7 @@ class TestRenewFullFlow:
             result = runner.invoke(
                 app,
                 ["renew"],
-                input="testpass\nn\n",  # passphrase + decline payment
+                input="n\n",  # decline payment
             )
 
         print("DECLINE OUTPUT:", result.output)
@@ -300,7 +286,7 @@ class TestRenewFullFlow:
         mock_provider.submit_renewal.assert_not_called()
 
     def test_renew_no_payment_info(self, saved_config, mock_keyring):
-        """Renew without payment info → clear error."""
+        """Renew without payment info -> clear error."""
         with (
             patch("faaadmv.cli.commands.renew.ConfigManager", return_value=saved_config),
             patch("faaadmv.cli.commands.renew.PaymentKeychain") as MockKC,
@@ -310,14 +296,13 @@ class TestRenewFullFlow:
             result = runner.invoke(
                 app,
                 ["renew"],
-                input="testpass\n",
             )
 
         assert result.exit_code == 1
         assert "Payment" in result.output and "not found" in result.output.lower()
 
     def test_renew_expired_card(self, saved_config, mock_keyring):
-        """P1: Renew with expired card → clear error before browser launch."""
+        """P1: Renew with expired card -> clear error before browser launch."""
         expired_payment = PaymentInfo(
             card_number="4242424242424242",
             expiry_month=1,
@@ -335,7 +320,6 @@ class TestRenewFullFlow:
             result = runner.invoke(
                 app,
                 ["renew"],
-                input="testpass\n",
             )
 
         print("EXPIRED CARD OUTPUT:", result.output)
@@ -368,7 +352,6 @@ class TestStatusExpired:
             result = runner.invoke(
                 app,
                 ["status"],
-                input="testpass\n",
             )
 
         print("EXPIRED STATUS OUTPUT:", result.output)
@@ -402,7 +385,6 @@ class TestStatusExpired:
             result = runner.invoke(
                 app,
                 ["status"],
-                input="testpass\n",
             )
 
         print("EXPIRING SOON OUTPUT:", result.output)
@@ -440,7 +422,6 @@ class TestStatusProseDisplay:
             result = runner.invoke(
                 app,
                 ["status"],
-                input="testpass\n",
             )
 
         print("PROSE STATUS OUTPUT:", result.output)
@@ -475,7 +456,6 @@ class TestStatusProseDisplay:
             result = runner.invoke(
                 app,
                 ["status"],
-                input="testpass\n",
             )
 
         print("MINIMAL STATUS OUTPUT:", result.output)

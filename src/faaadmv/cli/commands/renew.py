@@ -1,6 +1,7 @@
 """Renew command implementation."""
 
 import asyncio
+import logging
 from decimal import Decimal
 from typing import Optional
 
@@ -19,7 +20,6 @@ from faaadmv.exceptions import (
     BrowserError,
     CaptchaDetectedError,
     CaptchaSolveFailedError,
-    ConfigDecryptionError,
     DMVError,
     EligibilityError,
     FaaadmvError,
@@ -38,6 +38,7 @@ from faaadmv.models import (
 )
 from faaadmv.providers import get_provider
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -59,14 +60,7 @@ def run_renew(
         ))
         raise typer.Exit(1)
 
-    passphrase = Prompt.ask("  Enter your passphrase", password=True)
-
-    try:
-        config = manager.load(passphrase)
-    except ConfigDecryptionError:
-        console.print()
-        console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
-        raise typer.Exit(1)
+    config = manager.load()
 
     # Select vehicle
     from faaadmv.cli.commands.status import _select_vehicle
@@ -105,6 +99,8 @@ def run_renew(
             console.print(f"[dim]    Owner: {config.owner.full_name}[/dim]")
         if payment:
             console.print(f"[dim]    Card: {payment.masked_number} ({payment.card_type})[/dim]")
+
+    logger.info("Renew: plate=%s dry_run=%s headed=%s", selected_vehicle.plate, dry_run, headed)
 
     # Run async renewal flow
     try:
@@ -172,8 +168,9 @@ def run_renew(
         console.print("[yellow]Cancelled. No payment was made.[/yellow]")
         raise typer.Exit(1)
     except typer.Exit:
-        raise  # Let typer.Exit propagate (e.g., user declined payment)
+        raise
     except Exception as e:
+        logger.exception("Unexpected error in renew")
         console.print()
         console.print(error_panel("Unexpected error.", str(e)))
         raise typer.Exit(1)
@@ -186,15 +183,7 @@ async def _run_renewal(
     headed: bool,
     verbose: bool,
 ) -> None:
-    """Execute the full renewal flow.
-
-    Args:
-        config: User config with payment attached
-        vehicle: Selected vehicle to renew
-        dry_run: Stop before payment
-        headed: Show browser window
-        verbose: Detailed output
-    """
+    """Execute the full renewal flow."""
     provider_cls = get_provider(config.state)
     captcha_solver = CaptchaSolver()
 
@@ -273,7 +262,6 @@ def _display_eligibility(eligibility: EligibilityResult) -> None:
     """Display eligibility check results."""
     console.print()
 
-    # Smog
     if eligibility.smog.passed:
         smog_detail = ""
         if eligibility.smog.check_date:
@@ -282,7 +270,6 @@ def _display_eligibility(eligibility: EligibilityResult) -> None:
     else:
         console.print("  [red]\u2717[/red] Smog Check: [red]Failed[/red]")
 
-    # Insurance
     if eligibility.insurance.verified:
         ins_detail = ""
         if eligibility.insurance.provider:
@@ -308,7 +295,6 @@ def _display_fees(fees: FeeBreakdown) -> None:
     for item in fees.items:
         table.add_row(item.description, item.amount_display)
 
-    # Separator and total
     table.add_row("\u2500" * 25, "\u2500" * 10)
     table.add_row("[bold]Total[/bold]", f"[bold]{fees.total_display}[/bold]")
 

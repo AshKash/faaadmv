@@ -1,6 +1,7 @@
 """Interactive REPL for faaadmv."""
 
 import asyncio
+import logging
 from typing import Optional
 
 import typer
@@ -19,7 +20,6 @@ from faaadmv.core.keychain import PaymentKeychain
 from faaadmv.exceptions import (
     BrowserError,
     CaptchaDetectedError,
-    ConfigDecryptionError,
     DMVError,
     FaaadmvError,
     VehicleNotFoundError,
@@ -29,6 +29,7 @@ from faaadmv.models.payment import PaymentInfo
 from faaadmv.models.vehicle import VehicleEntry
 from faaadmv.providers import get_provider
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -38,7 +39,6 @@ class FaaadmvREPL:
     def __init__(self) -> None:
         self.manager = ConfigManager()
         self.config: Optional[UserConfig] = None
-        self.passphrase: Optional[str] = None
         self.payment: Optional[PaymentInfo] = None
 
     def run(self) -> None:
@@ -59,42 +59,22 @@ class FaaadmvREPL:
         if not self.manager.exists:
             return
 
-        console.print()
-        passphrase = Prompt.ask("  Enter passphrase", password=True)
-
         try:
-            self.config = self.manager.load(passphrase)
-            self.passphrase = passphrase
+            self.config = self.manager.load()
             self.payment = PaymentKeychain.retrieve()
-        except ConfigDecryptionError:
+            logger.info("Session loaded: %d vehicles", len(self.config.vehicles))
+        except Exception as e:
+            logger.exception("Failed to load config")
             console.print()
-            console.print(error_panel(
-                "Wrong passphrase.",
-                "Check your passphrase and try again.",
-            ))
-            raise typer.Exit(1)
+            console.print(error_panel("Failed to load configuration.", str(e)))
 
     def _save(self) -> None:
         """Save current config to disk."""
         if self.config is None:
             return
 
-        if self.passphrase is None:
-            console.print()
-            console.print("[dim]  Choose a passphrase to protect your data.[/dim]")
-            while True:
-                passphrase = Prompt.ask("  Passphrase", password=True)
-                if len(passphrase) < 4:
-                    console.print("  [red]Must be at least 4 characters.[/red]")
-                    continue
-                confirm = Prompt.ask("  Confirm", password=True)
-                if passphrase != confirm:
-                    console.print("  [red]Doesn't match. Try again.[/red]")
-                    continue
-                self.passphrase = passphrase
-                break
-
-        self.manager.save(self.config, self.passphrase)
+        self.manager.save(self.config)
+        logger.debug("Config saved")
 
     # --- Main loop ---
 
@@ -341,6 +321,9 @@ class FaaadmvREPL:
             return
 
         console.print()
+        console.print(f"  Checking status for [bold]{entry.vehicle.plate}[/bold]...")
+        logger.info("REPL status check: plate=%s vin=%s", entry.vehicle.plate, entry.vehicle.vin_last5)
+
         try:
             result = asyncio.run(
                 self._check_status(entry.vehicle.plate, entry.vehicle.vin_last5)
@@ -361,6 +344,7 @@ class FaaadmvREPL:
         except (DMVError, FaaadmvError) as e:
             console.print(error_panel(e.message, e.details))
         except Exception as e:
+            logger.exception("Unexpected error in REPL status check")
             console.print(error_panel("Unexpected error.", str(e)))
 
     def _action_renew(self) -> None:
@@ -398,6 +382,7 @@ class FaaadmvREPL:
             f"with {self.payment.card_type} {self.payment.masked_number}..."
         )
         console.print()
+        logger.info("REPL renew: plate=%s", entry.vehicle.plate)
 
         try:
             asyncio.run(
@@ -413,6 +398,7 @@ class FaaadmvREPL:
         except typer.Exit:
             pass  # User declined payment confirmation
         except Exception as e:
+            logger.exception("Unexpected error in REPL renew")
             console.print(error_panel("Unexpected error.", str(e)))
 
     # --- Async operations ---
@@ -421,13 +407,16 @@ class FaaadmvREPL:
         """Run status check against DMV."""
         state = self.config.state if self.config else "CA"
         provider_cls = get_provider(state)
+        logger.debug("Using provider: %s", provider_cls.__name__)
 
         async with BrowserManager(headless=True) as bm:
             provider = provider_cls(bm.context)
             await provider.initialize()
             try:
-                with console.status("[bold blue]Checking registration status...[/bold blue]"):
-                    return await provider.get_registration_status(plate, vin_last5)
+                console.print("  [dim]Connecting to DMV portal...[/dim]")
+                result = await provider.get_registration_status(plate, vin_last5)
+                console.print("  [dim]Status retrieved.[/dim]")
+                return result
             finally:
                 await provider.cleanup()
 
@@ -444,10 +433,11 @@ class FaaadmvREPL:
             await provider.initialize()
 
             try:
-                with console.status("[bold blue]Checking eligibility...[/bold blue]"):
-                    eligibility = await provider.validate_eligibility(
-                        vehicle.plate, vehicle.vin_last5
-                    )
+                console.print("  [dim]Connecting to DMV portal...[/dim]")
+                console.print("  [dim]Checking eligibility...[/dim]")
+                eligibility = await provider.validate_eligibility(
+                    vehicle.plate, vehicle.vin_last5
+                )
 
                 if await provider.has_captcha():
                     solved = await captcha_solver.solve(provider.page, headed=False)
@@ -458,8 +448,8 @@ class FaaadmvREPL:
                 self._display_eligibility(eligibility)
 
                 # Get fees
-                with console.status("[bold blue]Getting fees...[/bold blue]"):
-                    fees = await provider.get_fee_breakdown()
+                console.print("  [dim]Retrieving fees...[/dim]")
+                fees = await provider.get_fee_breakdown()
 
                 self._display_fees(fees)
 
@@ -479,8 +469,8 @@ class FaaadmvREPL:
 
                 # Submit
                 console.print()
-                with console.status("[bold blue]Processing payment...[/bold blue]"):
-                    result = await provider.submit_renewal(config_with_payment)
+                console.print("  [dim]Processing payment...[/dim]")
+                result = await provider.submit_renewal(config_with_payment)
 
                 self._display_renewal_result(result)
 

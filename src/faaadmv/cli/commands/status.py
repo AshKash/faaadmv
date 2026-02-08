@@ -1,6 +1,7 @@
 """Status command implementation."""
 
 import asyncio
+import logging
 from typing import Optional
 
 import typer
@@ -15,7 +16,6 @@ from faaadmv.core.config import ConfigManager
 from faaadmv.exceptions import (
     BrowserError,
     CaptchaDetectedError,
-    ConfigDecryptionError,
     ConfigNotFoundError,
     DMVError,
     FaaadmvError,
@@ -25,6 +25,7 @@ from faaadmv.models import RegistrationStatus, StatusType
 from faaadmv.models.vehicle import VehicleEntry
 from faaadmv.providers import get_provider
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -87,22 +88,13 @@ def run_status(
         ))
         raise typer.Exit(1)
 
-    passphrase = Prompt.ask("  Enter your passphrase", password=True)
-
-    try:
-        config = manager.load(passphrase)
-    except ConfigDecryptionError:
-        console.print()
-        console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
-        raise typer.Exit(1)
+    config = manager.load()
 
     if all_vehicles:
-        # Batch check all vehicles
         for entry in config.vehicles:
             _run_single_status(entry, config.state, headed, verbose)
         return
 
-    # Select vehicle
     entry = _select_vehicle(config, plate)
     _run_single_status(entry, config.state, headed, verbose)
 
@@ -114,11 +106,13 @@ def _run_single_status(
     verbose: bool,
 ) -> None:
     """Check status for a single vehicle."""
+    console.print(f"  Checking [bold]{entry.vehicle.plate}[/bold]...")
+    logger.info("Status check: plate=%s vin_last5=%s state=%s", entry.vehicle.plate, entry.vehicle.vin_last5, state)
+
     if verbose:
-        console.print(f"[dim]  Vehicle: {entry.vehicle.plate}[/dim]")
+        console.print(f"[dim]  Vehicle: {entry.vehicle.plate} / {entry.vehicle.masked_vin}[/dim]")
         console.print(f"[dim]  Provider: {state}[/dim]")
 
-    # Run async status check
     try:
         result = asyncio.run(
             _check_status(
@@ -161,6 +155,7 @@ def _run_single_status(
         console.print("[yellow]Cancelled.[/yellow]")
         raise typer.Exit(1)
     except Exception as e:
+        logger.exception("Unexpected error in status check")
         console.print()
         console.print(error_panel("Unexpected error.", str(e)))
         raise typer.Exit(1)
@@ -173,27 +168,18 @@ async def _check_status(
     headed: bool = False,
     verbose: bool = False,
 ) -> RegistrationStatus:
-    """Run the async status check against DMV portal.
-
-    Args:
-        plate: License plate number
-        vin_last5: Last 5 of VIN
-        state: State code for provider selection
-        headed: Show browser window (for CAPTCHA)
-        verbose: Show detailed output
-
-    Returns:
-        RegistrationStatus from provider
-    """
+    """Run the async status check against DMV portal."""
     provider_cls = get_provider(state)
+    logger.debug("Using provider: %s", getattr(provider_cls, "__name__", str(provider_cls)))
 
     async with BrowserManager(headless=not headed) as bm:
         provider = provider_cls(bm.context)
         await provider.initialize()
 
         try:
-            with console.status("[bold blue]Checking registration status...[/bold blue]"):
-                result = await provider.get_registration_status(plate, vin_last5)
+            console.print("  [dim]Connecting to DMV portal...[/dim]")
+            result = await provider.get_registration_status(plate, vin_last5)
+            console.print("  [dim]Status retrieved.[/dim]")
             return result
         finally:
             await provider.cleanup()
@@ -201,7 +187,6 @@ async def _check_status(
 
 def _display_status(result: RegistrationStatus, verbose: bool = False) -> None:
     """Display registration status with Rich formatting."""
-    # Status styling
     status_styles = {
         StatusType.CURRENT: ("green", "\u2713"),
         StatusType.EXPIRING_SOON: ("yellow", "\u26a0"),
@@ -212,18 +197,15 @@ def _display_status(result: RegistrationStatus, verbose: bool = False) -> None:
 
     color, icon = status_styles.get(result.status, ("white", "?"))
 
-    # Build panel content
     vehicle_line = f"[bold]{result.vehicle_description or 'Vehicle'}[/bold]"
     plate_line = f"Plate: {result.plate}"
     status_line = f"Status:     [{color}]{icon} {result.status_display}[/{color}]"
 
     content = f"{vehicle_line}\n{plate_line}\n\n{status_line}"
 
-    # Expiration date (may not be available from DMV status check)
     if result.expiration_date:
         content += f"\nExpires:    {result.expiration_date.strftime('%B %d, %Y')}"
 
-        # Days display
         if result.days_until_expiry is not None:
             if result.days_until_expiry > 0:
                 content += f"\nDays left:  {result.days_until_expiry}"
@@ -232,15 +214,12 @@ def _display_status(result: RegistrationStatus, verbose: bool = False) -> None:
             else:
                 content += f"\nOverdue:    [red]{abs(result.days_until_expiry)} days[/red]"
 
-    # Last updated date from DMV
     if result.last_updated:
         content += f"\nAs of:      {result.last_updated.strftime('%B %d, %Y')}"
 
-    # Status message from DMV (raw prose)
     if result.status_message:
         content += f"\n\n[dim]{result.status_message}[/dim]"
 
-    # Add hold reason if present
     if result.hold_reason:
         content += f"\n\nReason:     [yellow]{result.hold_reason}[/yellow]"
 

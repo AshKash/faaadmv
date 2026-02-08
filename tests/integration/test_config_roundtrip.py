@@ -1,4 +1,4 @@
-"""Integration tests for ConfigManager + Crypto roundtrip."""
+"""Integration tests for ConfigManager roundtrip."""
 
 import pytest
 
@@ -34,9 +34,9 @@ class TestConfigRoundtrip:
     def test_save_load_full_config(self, temp_config_dir, full_config):
         """Full save-load cycle preserves all data."""
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(full_config, passphrase="my-secret")
+        manager.save(full_config)
 
-        loaded = manager.load(passphrase="my-secret")
+        loaded = manager.load()
 
         # Vehicle
         assert loaded.vehicle.plate == "8ABC123"
@@ -57,8 +57,8 @@ class TestConfigRoundtrip:
         assert loaded.state == "CA"
         assert loaded.version == 2
 
-    def test_payment_not_in_encrypted_file(self, temp_config_dir, full_config):
-        """Payment data should NOT be in the encrypted config file."""
+    def test_payment_not_in_config_file(self, temp_config_dir, full_config):
+        """Payment data should NOT be in the config file."""
         from faaadmv.models.payment import PaymentInfo
 
         config_with_pay = full_config.with_payment(
@@ -72,33 +72,22 @@ class TestConfigRoundtrip:
         )
 
         manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(config_with_pay, passphrase="test")
+        manager.save(config_with_pay)
 
-        # Load back — payment should be None (excluded from serialization)
-        loaded = manager.load(passphrase="test")
+        # Load back -- payment should be None (excluded from serialization)
+        loaded = manager.load()
         assert loaded.payment is None
 
     def test_save_delete_save_cycle(self, temp_config_dir, full_config):
         """Config can be deleted and re-saved."""
         manager = ConfigManager(config_dir=temp_config_dir)
 
-        manager.save(full_config, passphrase="pass1")
+        manager.save(full_config)
         assert manager.exists is True
 
         manager.delete()
         assert manager.exists is False
 
-        manager.save(full_config, passphrase="pass2")
-        loaded = manager.load(passphrase="pass2")
+        manager.save(full_config)
+        loaded = manager.load()
         assert loaded.vehicle.plate == "8ABC123"
-
-    def test_config_file_is_not_readable_toml(self, temp_config_dir, full_config):
-        """Raw file should not be valid TOML (it's encrypted)."""
-        import tomli
-
-        manager = ConfigManager(config_dir=temp_config_dir)
-        manager.save(full_config, passphrase="test")
-
-        raw = manager.config_path.read_bytes()
-        with pytest.raises(Exception):
-            tomli.loads(raw.decode("utf-8", errors="replace"))

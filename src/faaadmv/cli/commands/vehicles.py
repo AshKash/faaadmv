@@ -1,5 +1,6 @@
 """Vehicles management command implementation."""
 
+import logging
 from typing import Optional
 
 import typer
@@ -10,9 +11,9 @@ from rich.table import Table
 
 from faaadmv.cli.ui import error_panel, success_panel
 from faaadmv.core.config import ConfigManager
-from faaadmv.exceptions import ConfigDecryptionError
 from faaadmv.models import VehicleInfo
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -32,21 +33,14 @@ def run_vehicles(
         ))
         raise typer.Exit(1)
 
-    passphrase = Prompt.ask("  Enter your passphrase", password=True)
-
-    try:
-        config = manager.load(passphrase)
-    except ConfigDecryptionError:
-        console.print()
-        console.print(error_panel("Wrong passphrase.", "Check your passphrase and try again."))
-        raise typer.Exit(1)
+    config = manager.load()
 
     if add:
-        _handle_add(manager, config, passphrase)
+        _handle_add(manager, config)
     elif remove:
-        _handle_remove(manager, config, passphrase, remove)
+        _handle_remove(manager, config, remove)
     elif default:
-        _handle_default(manager, config, passphrase, default)
+        _handle_default(manager, config, default)
     else:
         _handle_list(config)
 
@@ -76,7 +70,7 @@ def _handle_list(config) -> None:
     console.print(f"[dim]  {len(config.vehicles)} vehicle(s) registered.[/dim]")
 
 
-def _handle_add(manager, config, passphrase: str) -> None:
+def _handle_add(manager, config) -> None:
     """Add a new vehicle interactively."""
     console.print()
     console.print("[bold cyan]--- Add Vehicle ---[/bold cyan]")
@@ -114,13 +108,13 @@ def _handle_add(manager, config, passphrase: str) -> None:
         make_default = Confirm.ask("  Set as default vehicle?", default=False)
 
     updated = config.add_vehicle(vehicle, nickname=nickname, is_default=make_default)
-    manager.save(updated, passphrase)
+    manager.save(updated)
 
     console.print()
     console.print(success_panel(f"Vehicle {vehicle.plate} added."))
 
 
-def _handle_remove(manager, config, passphrase: str, plate: str) -> None:
+def _handle_remove(manager, config, plate: str) -> None:
     """Remove a vehicle by plate."""
     entry = config.get_vehicle(plate)
     if not entry:
@@ -149,7 +143,7 @@ def _handle_remove(manager, config, passphrase: str, plate: str) -> None:
         return
 
     updated = config.remove_vehicle(plate)
-    manager.save(updated, passphrase)
+    manager.save(updated)
 
     console.print()
     console.print(success_panel(f"Vehicle {entry.vehicle.plate} removed."))
@@ -159,7 +153,7 @@ def _handle_remove(manager, config, passphrase: str, plate: str) -> None:
         console.print(f"[dim]  New default: {new_default.vehicle.plate}[/dim]")
 
 
-def _handle_default(manager, config, passphrase: str, plate: str) -> None:
+def _handle_default(manager, config, plate: str) -> None:
     """Set a vehicle as default."""
     entry = config.get_vehicle(plate)
     if not entry:
@@ -176,7 +170,7 @@ def _handle_default(manager, config, passphrase: str, plate: str) -> None:
         return
 
     updated = config.set_default(plate)
-    manager.save(updated, passphrase)
+    manager.save(updated)
 
     console.print()
     console.print(success_panel(f"{entry.vehicle.plate} set as default vehicle."))
