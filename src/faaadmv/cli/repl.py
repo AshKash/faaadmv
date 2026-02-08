@@ -119,7 +119,7 @@ class FaaadmvREPL:
             name = f" \u2014 {entry.nickname}" if entry.nickname else ""
             console.print(
                 f"  {default} [bold]{entry.vehicle.plate}[/bold]{name}"
-                f" [dim]({entry.vehicle.masked_vin})[/dim]"
+                f" [dim](VIN …{entry.vehicle.vin_last5})[/dim]"
             )
 
         # Payment

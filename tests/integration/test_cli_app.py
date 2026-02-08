@@ -1,11 +1,28 @@
 """Integration tests for CLI app entry points."""
 
 import pytest
+from unittest.mock import patch
 from typer.testing import CliRunner
 
 from faaadmv.cli.app import app
+from faaadmv.core.config import ConfigManager
 
 runner = CliRunner()
+
+
+@pytest.fixture
+def no_config(tmp_path):
+    """Ensure commands see no config by pointing ConfigManager at empty dir."""
+    empty_dir = tmp_path / ".config" / "faaadmv"
+    manager = ConfigManager(config_dir=empty_dir)
+    with (
+        patch("faaadmv.cli.commands.register.ConfigManager", return_value=manager),
+        patch("faaadmv.cli.commands.status.ConfigManager", return_value=manager),
+        patch("faaadmv.cli.commands.renew.ConfigManager", return_value=manager),
+        patch("faaadmv.cli.commands.vehicles.ConfigManager", return_value=manager),
+        patch("faaadmv.cli.repl.ConfigManager", return_value=manager),
+    ):
+        yield manager
 
 
 class TestCLIEntryPoints:
@@ -58,7 +75,7 @@ class TestCLIEntryPoints:
 
 
 class TestRegisterCommand:
-    def test_register_verify_no_config(self):
+    def test_register_verify_no_config(self, no_config):
         """--verify with no config should fail gracefully with helpful message."""
         result = runner.invoke(app, ["register", "--verify"])
         assert result.exit_code == 1
@@ -71,13 +88,13 @@ class TestRegisterCommand:
         assert result.exit_code == 0
         assert "Cancelled" in result.output
 
-    def test_register_vehicle_only_no_config(self):
+    def test_register_vehicle_only_no_config(self, no_config):
         """--vehicle with no existing config should fail with helpful message."""
         result = runner.invoke(app, ["register", "--vehicle"])
         assert result.exit_code == 1
         assert "No existing configuration" in result.output or "register" in result.output
 
-    def test_register_payment_only_no_config(self):
+    def test_register_payment_only_no_config(self, no_config):
         """--payment with no existing config should fail with helpful message."""
         result = runner.invoke(app, ["register", "--payment"])
         assert result.exit_code == 1
@@ -85,33 +102,33 @@ class TestRegisterCommand:
 
 
 class TestStatusCommand:
-    def test_status_no_config(self):
+    def test_status_no_config(self, no_config):
         """Status with no config should fail with helpful message."""
         result = runner.invoke(app, ["status"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output
 
-    def test_status_verbose_no_config(self):
+    def test_status_verbose_no_config(self, no_config):
         result = runner.invoke(app, ["status", "--verbose"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output
 
 
 class TestRenewCommand:
-    def test_renew_no_config(self):
+    def test_renew_no_config(self, no_config):
         """Renew with no config should fail with helpful message."""
         result = runner.invoke(app, ["renew"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output
 
-    def test_renew_dry_run_no_config(self):
+    def test_renew_dry_run_no_config(self, no_config):
         result = runner.invoke(app, ["renew", "--dry-run"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output
 
 
 class TestREPL:
-    def test_repl_no_config_shows_add_option(self):
+    def test_repl_no_config_shows_add_option(self, no_config):
         """REPL with no config shows 'Add a vehicle' option."""
         result = runner.invoke(app, [], input="q\n")
         assert "No vehicles registered" in result.output
@@ -124,11 +141,8 @@ class TestREPL:
 
     def test_repl_add_vehicle_flow(self, tmp_path, mock_keyring):
         """REPL: add vehicle -> shows in dashboard."""
-        from unittest.mock import patch
-
         config_dir = tmp_path / ".config" / "faaadmv"
         with patch("faaadmv.cli.repl.ConfigManager") as MockCM:
-            from faaadmv.core.config import ConfigManager
             real_manager = ConfigManager(config_dir=config_dir)
             MockCM.return_value = real_manager
 
@@ -147,7 +161,7 @@ class TestREPL:
 
 
 class TestVehiclesCommand:
-    def test_vehicles_no_config(self):
+    def test_vehicles_no_config(self, no_config):
         """Vehicles with no config should fail with helpful message."""
         result = runner.invoke(app, ["vehicles"])
         assert result.exit_code == 1
@@ -160,7 +174,7 @@ class TestVehiclesCommand:
         assert "--remove" in result.output
         assert "--default" in result.output
 
-    def test_vehicles_add_no_config(self):
+    def test_vehicles_add_no_config(self, no_config):
         result = runner.invoke(app, ["vehicles", "--add"])
         assert result.exit_code == 1
         assert "No configuration found" in result.output
