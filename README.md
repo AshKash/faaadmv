@@ -38,22 +38,6 @@ In the REPL:
 - `w` Toggle watch mode
 - `q` Quit
 
-## Legacy Commands (still supported)
-
-The REPL is the primary workflow, but these commands remain for scripting:
-
-```bash
-faaadmv register
-faaadmv status
-faaadmv renew
-faaadmv vehicles
-```
-
-Common options:
-- `register --vehicle --payment --verify --reset`
-- `status --plate --all --verbose --headed`
-- `renew --dry-run --plate --verbose --headed`
-
 ## Artifacts and Logs
 
 - Debug log: `~/Library/Application Support/faaadmv/debug.log`
@@ -90,7 +74,7 @@ uv pip install -e ".[dev]"
 faaadmv
 ```
 
-Automated tests are currently removed; see `docs/TESTING.md` for manual testing guidance.
+See `docs/TESTING.md` for the manual testing checklist.
 
 ## Documentation
 

@@ -21,7 +21,7 @@ faaadmv/
 │       │   ├── __init__.py
 │       │   ├── app.py             # Typer app + command definitions
 │       │   ├── repl.py            # Interactive REPL (primary UX)
-│       │   ├── commands/          # Legacy command implementations
+│       │   ├── commands/          # Command implementations (not exposed in help)
 │       │   │   ├── __init__.py
 │       │   │   ├── register.py    # faaadmv register
 │       │   │   ├── status.py      # faaadmv status
@@ -74,7 +74,7 @@ The application writes user data to OS-specific locations via `platformdirs`.
 |--------|----------------|
 | `cli/app.py` | Typer app setup, command definitions with options |
 | `cli/repl.py` | Primary interactive flow (menu, watch mode, screenshots) |
-| `cli/commands/*.py` | Legacy command implementations |
+| `cli/commands/*.py` | Command implementations (not exposed in help) |
 | `cli/ui.py` | Rich panels, tables, masked display, formatting |
 | `core/config.py` | Load, save, validate, encrypt/decrypt user configuration |
 | `core/crypto.py` | Fernet encryption, scrypt key derivation |
