@@ -1,13 +1,13 @@
-# CLAUDE.md — Agent Entry Point
+# AGENTS.md — Agent Entry Point
 
-> This file is read automatically by Claude Code at session start.
+> This file is read automatically by Codex at session start.
 > It tells any agent how to navigate, build, test, and contribute to this project.
 
 ## Project Overview
 
-**faaadmv** is a Python CLI tool that automates California DMV vehicle registration renewal via browser automation (Playwright). Users register their vehicle/payment info once, then check status and renew from the terminal.
+**faaadmv** is a Python REPL-first CLI tool that automates California DMV vehicle registration renewal via browser automation (Playwright). Users register their vehicle/payment info once, then check status and renew from the terminal.
 
-**Stage:** MVP (v0.1.0) — single vehicle, CA-only, core flows working.
+**Stage:** MVP (v0.1.0) — single state (CA), core flows working.
 
 ## Quick Setup
 
@@ -23,24 +23,21 @@ playwright install chromium
 faaadmv --version
 ```
 
-## Running Tests
+## Manual Testing
 
 ```bash
-# Full suite (232 tests, all should pass)
-pytest
+# Start REPL
+faaadmv
 
-# Unit tests only (fast, ~2s)
-pytest tests/unit -v
-
-# Integration tests
-pytest tests/integration -v
-
-# E2E tests (uses CliRunner, no real browser)
-pytest tests/e2e -v
-
-# With coverage
-pytest --cov=faaadmv --cov-report=html
+# In REPL:
+# a = add vehicle
+# s = status check
+# d = renew dry-run
+# r = renew
+# w = toggle watch mode
 ```
+
+See `docs/TESTING.md` for the full manual checklist.
 
 ## Project Structure
 
@@ -48,6 +45,7 @@ pytest --cov=faaadmv --cov-report=html
 src/faaadmv/
   cli/
     app.py              # Typer app — commands: register, status, renew
+    repl.py             # REPL (primary UX)
     commands/
       register.py       # Interactive setup (vehicle + owner + payment)
       status.py         # Check registration via DMV portal
@@ -71,25 +69,16 @@ src/faaadmv/
     registry.py         # Provider discovery (get_provider("CA"))
   exceptions.py         # Full exception hierarchy
 
-tests/
-  unit/                 # 10 test files — models, crypto, config, ui, registry, parsing
-  integration/          # 3 test files — CLI app, config roundtrip, keychain
-  e2e/                  # 2 test files — register flow, status/renew flows
-  conftest.py           # Shared fixtures (temp_home, saved_config, mock_keyring)
-
-testing/                # Test agent tracking (do not edit manually)
-  TEST_STATUS.md        # Test results, coverage, run history
-  BUGS.md               # Bug reports with repro steps
-
 docs/                   # Design documentation
   ARCHITECTURE.md       # System layers and data flow
   DATA_MODELS.md        # Pydantic model reference
   PROVIDERS.md          # Provider interface + CA DMV details
   SECURITY.md           # Encryption, keychain, threat model
-  TESTING.md            # Testing strategy and categories
+  TESTING.md            # Manual testing guide
   PROJECT_STRUCTURE.md  # Directory layout
 
-STATUS.md               # Feature implementation status (dev agent maintains)
+AGENTS.md               # This file
+STATUS.md               # Feature implementation status
 PRD.md                  # Product requirements document
 ```
 
@@ -104,53 +93,22 @@ PRD.md                  # Product requirements document
 - Line length 88, formatter/linter is `ruff`
 - Type checking with `mypy --strict`
 
-## CLI Commands
+## REPL Actions
 
-```bash
-faaadmv register              # Interactive setup
-faaadmv register --verify     # Show saved config (masked)
-faaadmv register --reset      # Delete all saved data
-faaadmv register --vehicle    # Update vehicle info only
-faaadmv register --payment    # Update payment info only
-
-faaadmv status                # Check registration status
-faaadmv status --headed       # Show browser (for CAPTCHA)
-faaadmv status --verbose      # Detailed output
-
-faaadmv renew                 # Full renewal with payment
-faaadmv renew --dry-run       # Stop before payment
-faaadmv renew --headed        # Show browser (for CAPTCHA)
-```
-
-## Multi-Agent Protocol
-
-This project uses a **dev agent + test agent** workflow:
-
-### For the Dev Agent
-- Implement features and mark them `testable` in `STATUS.md`
-- Check `testing/BUGS.md` for bugs filed by the test agent
-- Fix bugs, then mark them `fixed` in `testing/BUGS.md`
-- Do NOT edit files in `testing/` (test agent owns those)
-
-### For the Test Agent
-- Check `STATUS.md` to find features marked `testable`
-- Write tests in `tests/unit/`, `tests/integration/`, or `tests/e2e/`
-- Report results in `testing/TEST_STATUS.md`
-- File bugs in `testing/BUGS.md` with IDs like `BUG-001`
-- Do NOT edit source files in `src/` (dev agent owns those)
-
-### Communication Files
-| File | Owner | Purpose |
-|------|-------|---------|
-| `STATUS.md` | Dev agent | Feature implementation status |
-| `testing/TEST_STATUS.md` | Test agent | Test results and coverage |
-| `testing/BUGS.md` | Test agent (file), Dev agent (fix) | Bug tracking |
+- `a` Add a vehicle
+- `s` Status check
+- `d` Renew (dry-run)
+- `r` Renew
+- `x` Remove a vehicle
+- `m` Set default vehicle (when multiple)
+- `w` Toggle watch mode
+- `q` Quit
 
 ## Architecture Overview
 
 ```
 CLI Layer (Typer + Rich)
-  register │ status │ renew
+  REPL (primary) | register | status | renew
             ↓
 Core Services Layer
   ConfigManager │ BrowserManager │ CaptchaSolver │ PaymentKeychain

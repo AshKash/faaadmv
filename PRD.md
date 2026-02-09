@@ -151,9 +151,7 @@ $ faaadmv renew
 ```
 
 **Dry Run Mode:**
-```bash
-faaadmv renew --dry-run  # Stops before payment, validates entire flow
-```
+Run from the REPL using the `d` action (Renew dry-run). This stops before payment and validates the full flow.
 
 ---
 
@@ -394,12 +392,14 @@ $ faaadmv register --verify
   ✓ All fields valid.
 ```
 
-### Global Flags
+### Legacy Flags (CLI commands)
+These are still supported for scripting, but the REPL is the primary UX.
+
 | Flag | Description |
 |------|-------------|
 | `--verbose` / `-v` | Show detailed step-by-step logging |
 | `--headed` | Force visible browser (for CAPTCHA solving) |
-| `--dry-run` | Run without making payment |
+| `--dry-run` | Run without making payment (CLI renew) |
 | `--plate <PLATE>` | Specify vehicle (required when multiple registered) |
 | `--state <code>` | Override state (default: CA) |
 
@@ -447,7 +447,7 @@ $ faaadmv register --verify
 ### Phase 3: Renewal Flow (Dry Run)
 - [ ] CA DMV provider: full navigation flow
 - [ ] CAPTCHA detection and headed fallback
-- [ ] `faaadmv renew --dry-run` (stops before payment)
+- [ ] REPL dry-run renewal (stops before payment)
 - [ ] Eligibility verification (smog/insurance)
 
 ### Phase 4: Payment & Release

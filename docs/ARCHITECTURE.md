@@ -2,14 +2,14 @@
 
 ## Overview
 
-faaadmv is a layered CLI application that automates DMV vehicle registration renewal through browser automation.
+faaadmv is a layered CLI application that automates DMV vehicle registration renewal through browser automation. The primary UX is a REPL with a watch mode for manual verification.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           CLI Layer (Typer + Rich)                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                   │
-│  │ register │ │  status  │ │  renew   │ │   help   │                   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘                   │
+│                      CLI Layer (Typer + Rich)                           │
+│  ┌──────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
+│  │ REPL (main)  │  │ register │  │  status  │  │  renew   │             │
+│  └──────────────┘  └──────────┘  └──────────┘  └──────────┘             │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -18,8 +18,8 @@ faaadmv is a layered CLI application that automates DMV vehicle registration ren
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐ │
 │  │ ConfigManager   │  │ BrowserManager  │  │ CaptchaSolver           │ │
 │  │ - load/save     │  │ - launch        │  │ - detect                │ │
-│  │ - encrypt       │  │ - navigate      │  │ - solve (API/manual)    │ │
-│  │ - validate      │  │ - screenshot    │  │                         │ │
+│  │ - validate      │  │ - navigate      │  │ - solve (API/manual)    │ │
+│  │ - encrypt       │  │ - screenshot    │  │                         │ │
 │  └─────────────────┘  └─────────────────┘  └─────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -58,6 +58,7 @@ faaadmv is a layered CLI application that automates DMV vehicle registration ren
 | Component | Responsibility |
 |-----------|----------------|
 | `app.py` | Typer application, command definitions, argument parsing |
+| `repl.py` | Primary interactive flow (menu, watch mode, screenshots) |
 | `ui.py` | Rich console helpers, panels, tables, masked display, formatting |
 
 ### Core Services Layer (`faaadmv/core/`)
@@ -67,7 +68,7 @@ faaadmv is a layered CLI application that automates DMV vehicle registration ren
 | `config.py` | Load, save, validate, encrypt/decrypt user configuration |
 | `crypto.py` | Encryption primitives (Fernet, scrypt key derivation) |
 | `keychain.py` | OS keychain wrapper for payment credentials (via `keyring`) |
-| `browser.py` | Playwright browser lifecycle, tracker blocking, context management |
+| `browser.py` | Playwright browser lifecycle, context management, screenshots |
 | `captcha.py` | CAPTCHA detection, API solving, manual fallback |
 
 ### Provider Layer (`faaadmv/providers/`)
@@ -104,40 +105,15 @@ Capture Receipt → Save PDF
 - Single browser context per command execution
 - No concurrent DMV requests (rate limiting protection)
 
-## Error Handling Strategy
-
-```
-Exception Hierarchy:
-├── FaaadmvError (base)
-│   ├── ConfigError
-│   │   ├── ConfigNotFoundError
-│   │   ├── ConfigDecryptionError
-│   │   └── ConfigValidationError
-│   ├── BrowserError
-│   │   ├── NavigationError
-│   │   ├── TimeoutError
-│   │   └── SelectorNotFoundError
-│   ├── DMVError
-│   │   ├── VehicleNotFoundError
-│   │   ├── EligibilityError
-│   │   ├── SmogCheckError
-│   │   ├── InsuranceError
-│   │   └── PaymentError
-│   │       └── PaymentDeclinedError
-│   └── CaptchaError
-│       ├── CaptchaDetectedError
-│       └── CaptchaSolveFailedError
-```
-
 ## State Management
 
-The application is **stateless between invocations**. All persistent state is stored in:
+The application is stateless between invocations. Persistent state is stored locally:
 
-1. **Config file** (`~/.config/faaadmv/config.enc`) - Encrypted user data (owner, vehicles)
-2. **OS Keychain** - Payment credentials (CC, CVV)
-3. **Browser context** - Session cookies (ephemeral, per-run)
+1. **Config file** (via `platformdirs`) — macOS default: `~/Library/Application Support/faaadmv/config.toml`
+2. **OS Keychain** — payment credentials (CC, CVV)
+3. **Artifacts** — screenshots in `~/Library/Application Support/faaadmv/artifacts/`
 
-### Vehicle Resolution (planned — multi-vehicle)
+### Vehicle Resolution
 
 When a command needs a vehicle, it resolves in this order:
 
@@ -158,8 +134,8 @@ When a command needs a vehicle, it resolves in this order:
 ┌─────────────────────────────────────────────────────────────┐
 │                    User's Machine (Trusted)                  │
 │  ┌─────────────────┐  ┌─────────────────────────────────┐   │
-│  │ Config (enc)    │  │ OS Keychain                     │   │
-│  │ ~/.config/      │  │ (CC, CVV)                       │   │
+│  │ Config (local)  │  │ OS Keychain                     │   │
+│  │ (platformdirs)  │  │ (CC, CVV)                       │   │
 │  └─────────────────┘  └─────────────────────────────────┘   │
 │                              │                               │
 │  ┌───────────────────────────┼───────────────────────────┐  │
@@ -177,7 +153,5 @@ When a command needs a vehicle, it resolves in this order:
 ## Extensibility Points
 
 1. **New States**: Implement `BaseProvider` subclass
-2. **New Vehicles**: Multi-vehicle support planned (Phase 5)
-3. **New CAPTCHA Solvers**: Add solver to `captcha.py` strategy chain
-4. **New Storage Backends**: Implement `ConfigBackend` protocol
-5. **Custom UI Themes**: Extend Rich theme in `ui.py`
+2. **New CAPTCHA Solvers**: Add solver to `captcha.py` strategy chain
+3. **Custom UI Themes**: Extend Rich theme in `ui.py`

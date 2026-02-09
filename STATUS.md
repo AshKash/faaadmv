@@ -165,7 +165,7 @@
 |---------|--------|------------|
 | Load config + payment | testable | Loads encrypted config via `ConfigManager`, payment via `PaymentKeychain.retrieve()`. For unit tests: mock both. |
 | Expired card rejection | testable | Payment with expired card → error panel "Payment card is expired" before any browser activity. |
-| Missing payment (non-dry-run) | testable | No payment in keychain + not `--dry-run` → error "Payment information not found". |
+| Missing payment (non-dry-run) | testable | No payment in keychain + not dry-run → error "Payment information not found". |
 | Eligibility check | testable | Calls `provider.validate_eligibility()`. Mock provider for unit tests. |
 | Eligibility display | testable | `_display_eligibility(result)` shows green check for passed smog/insurance, red X for failed. Test by calling directly. |
 | Fee breakdown display | testable | `_display_fees(fees)` renders Rich table with items and total. Test by calling directly with `FeeBreakdown`. |
@@ -174,13 +174,13 @@
 | Submit payment | testable | Calls `provider.submit_renewal(config)` with payment attached. Mock provider for tests. |
 | Result display (success) | testable | `_display_result(result)` with `success=True` shows confirmation number, receipt path, new expiration. |
 | Result display (failure) | testable | `_display_result(result)` with `success=False` shows error message. |
-| `--dry-run` mode | testable | After fee display, shows "Dry run complete" and returns without payment. |
-| `--headed` mode | testable | `BrowserManager(headless=False)` used. CAPTCHA solver gets `headed=True`. |
+| Dry-run mode | testable | After fee display, shows "Dry run complete" and returns without payment. |
+| Headed mode | testable | `BrowserManager(headless=False)` used. CAPTCHA solver gets `headed=True`. |
 | `--verbose` output | testable | Shows vehicle plate, owner name, card info after loading config. |
 | Error: smog check failed | testable | `SmogCheckError` → error panel with smog station guidance. |
 | Error: insurance not verified | testable | `InsuranceError` → error panel with insurance provider guidance. |
 | Error: payment declined | testable | `PaymentDeclinedError` → error panel "Card declined". |
-| Error: CAPTCHA detected | testable | `CaptchaDetectedError` → suggests `--headed` flag. |
+| Error: CAPTCHA detected | testable | `CaptchaDetectedError` → suggests enabling watch mode in REPL. |
 | Step progress display | testable | `_step("msg", 1, 6)` outputs `[1/6] msg ✓`. |
 
 ## Provider Layer (`src/faaadmv/providers/`)
