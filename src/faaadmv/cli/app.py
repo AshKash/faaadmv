@@ -1,7 +1,5 @@
 """Main CLI application."""
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 
@@ -67,8 +65,12 @@ def status(
         False, "--headed", help="Show browser window (for CAPTCHA)"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-    plate: str = typer.Option(None, "--plate", help="Check specific vehicle by plate"),
-    all_vehicles: bool = typer.Option(False, "--all", help="Check all registered vehicles"),
+    plate: str | None = typer.Option(
+        None, "--plate", help="Check specific vehicle by plate"
+    ),
+    all_vehicles: bool = typer.Option(
+        False, "--all", help="Check all registered vehicles"
+    ),
 ) -> None:
     """Check your current registration status."""
     setup_logging()
@@ -85,8 +87,12 @@ def status(
 @app.command()
 def vehicles(
     add: bool = typer.Option(False, "--add", help="Add a new vehicle"),
-    remove: str = typer.Option(None, "--remove", help="Remove a vehicle by plate number"),
-    default: str = typer.Option(None, "--default", help="Set default vehicle by plate"),
+    remove: str | None = typer.Option(
+        None, "--remove", help="Remove a vehicle by plate number"
+    ),
+    default: str | None = typer.Option(
+        None, "--default", help="Set default vehicle by plate"
+    ),
 ) -> None:
     """Manage registered vehicles."""
     setup_logging()
@@ -97,14 +103,14 @@ def vehicles(
 
 @app.command()
 def renew(
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Run without making payment"
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Run without making payment"),
     headed: bool = typer.Option(
         False, "--headed", help="Show browser window (for CAPTCHA)"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-    plate: str = typer.Option(None, "--plate", help="Renew specific vehicle by plate"),
+    plate: str | None = typer.Option(
+        None, "--plate", help="Renew specific vehicle by plate"
+    ),
 ) -> None:
     """Renew your vehicle registration."""
     setup_logging()

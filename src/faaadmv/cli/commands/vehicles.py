@@ -1,7 +1,6 @@
 """Vehicles management command implementation."""
 
 import logging
-from typing import Optional
 
 import typer
 from pydantic import ValidationError
@@ -19,18 +18,20 @@ console = Console()
 
 def run_vehicles(
     add: bool = False,
-    remove: Optional[str] = None,
-    default: Optional[str] = None,
+    remove: str | None = None,
+    default: str | None = None,
 ) -> None:
     """Run the vehicles management command."""
     console.print()
 
     manager = ConfigManager()
     if not manager.exists:
-        console.print(error_panel(
-            "No configuration found.",
-            "Run 'faaadmv register' to set up your first vehicle.",
-        ))
+        console.print(
+            error_panel(
+                "No configuration found.",
+                "Run 'faaadmv register' to set up your first vehicle.",
+            )
+        )
         raise typer.Exit(1)
 
     config = manager.load()
@@ -94,10 +95,12 @@ def _handle_add(manager, config) -> None:
     # Check for duplicate plate
     if config.get_vehicle(vehicle.plate):
         console.print()
-        console.print(error_panel(
-            f"Vehicle {vehicle.plate} already registered.",
-            "Use 'faaadmv register --vehicle' to update it.",
-        ))
+        console.print(
+            error_panel(
+                f"Vehicle {vehicle.plate} already registered.",
+                "Use 'faaadmv register --vehicle' to update it.",
+            )
+        )
         raise typer.Exit(1)
 
     nickname = Prompt.ask("  Nickname (optional)", default="")
@@ -119,18 +122,22 @@ def _handle_remove(manager, config, plate: str) -> None:
     entry = config.get_vehicle(plate)
     if not entry:
         console.print()
-        console.print(error_panel(
-            f"Vehicle '{plate}' not found.",
-            f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
-        ))
+        console.print(
+            error_panel(
+                f"Vehicle '{plate}' not found.",
+                f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
+            )
+        )
         raise typer.Exit(1)
 
     if len(config.vehicles) == 1:
         console.print()
-        console.print(error_panel(
-            "Cannot remove the last vehicle.",
-            "Use 'faaadmv register --reset' to delete all configuration.",
-        ))
+        console.print(
+            error_panel(
+                "Cannot remove the last vehicle.",
+                "Use 'faaadmv register --reset' to delete all configuration.",
+            )
+        )
         raise typer.Exit(1)
 
     console.print()
@@ -158,10 +165,12 @@ def _handle_default(manager, config, plate: str) -> None:
     entry = config.get_vehicle(plate)
     if not entry:
         console.print()
-        console.print(error_panel(
-            f"Vehicle '{plate}' not found.",
-            f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
-        ))
+        console.print(
+            error_panel(
+                f"Vehicle '{plate}' not found.",
+                f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
+            )
+        )
         raise typer.Exit(1)
 
     if entry.is_default:

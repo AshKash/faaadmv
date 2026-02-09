@@ -85,7 +85,11 @@ class CADMVProvider(BaseProvider):
         logger.info("Status check: navigating to %s", self.STATUS_URL)
         await self.page.goto(self.STATUS_URL)
         await self.page.wait_for_load_state("domcontentloaded")
-        logger.debug("Step 1: page loaded, title=%s url=%s", await self.page.title(), self.page.url)
+        logger.debug(
+            "Step 1: page loaded, title=%s url=%s",
+            await self.page.title(),
+            self.page.url,
+        )
 
         # Log lightweight fingerprint for debugging bot detection
         fingerprint = await self.collect_fingerprint()
@@ -114,7 +118,11 @@ class CADMVProvider(BaseProvider):
                 response.url,
             )
 
-        logger.debug("Step 2: page loaded, title=%s url=%s", await self.page.title(), self.page.url)
+        logger.debug(
+            "Step 2: page loaded, title=%s url=%s",
+            await self.page.title(),
+            self.page.url,
+        )
 
         # Step 2: Wait for VIN input to appear and fill it
         await self.page.wait_for_selector(
@@ -381,13 +389,6 @@ class CADMVProvider(BaseProvider):
     # Private helper methods
     # ─────────────────────────────────────────────────────────────────────
 
-    async def _get_text(self, selector: str) -> str:
-        """Get inner text of element."""
-        if not self.page:
-            return ""
-        el = await self.page.query_selector(selector)
-        return await el.inner_text() if el else ""
-
     def _parse_date(self, text: str) -> date | None:
         """Parse date from various formats."""
         for fmt in ("%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"):
@@ -397,9 +398,7 @@ class CADMVProvider(BaseProvider):
                 continue
 
         # Try to extract date from within longer text
-        match = re.search(
-            r"(\w+ \d{1,2}, \d{4}|\d{1,2}/\d{1,2}/\d{4})", text.strip()
-        )
+        match = re.search(r"(\w+ \d{1,2}, \d{4}|\d{1,2}/\d{1,2}/\d{4})", text.strip())
         if match:
             for fmt in ("%B %d, %Y", "%m/%d/%Y"):
                 try:
@@ -415,19 +414,6 @@ class CADMVProvider(BaseProvider):
         if match:
             return Decimal(match.group(1).replace(",", ""))
         return Decimal("0")
-
-    def _determine_status(self, text: str, days_left: int) -> StatusType:
-        """Determine status type from text and days."""
-        text_lower = text.lower()
-        if "expired" in text_lower:
-            return StatusType.EXPIRED
-        if "pending" in text_lower:
-            return StatusType.PENDING
-        if "hold" in text_lower:
-            return StatusType.HOLD
-        if days_left <= 90:
-            return StatusType.EXPIRING_SOON
-        return StatusType.CURRENT
 
     async def _debug_screenshot(self, label: str) -> None:
         """Save a debug screenshot when parsing fails."""

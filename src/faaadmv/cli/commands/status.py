@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -15,7 +14,6 @@ from faaadmv.core.config import ConfigManager
 from faaadmv.exceptions import (
     BrowserError,
     CaptchaDetectedError,
-    ConfigNotFoundError,
     DMVError,
     FaaadmvError,
     VehicleNotFoundError,
@@ -28,15 +26,17 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 
-def _select_vehicle(config, plate: Optional[str] = None) -> VehicleEntry:
+def _select_vehicle(config, plate: str | None = None) -> VehicleEntry:
     """Select a vehicle from config, prompting if needed."""
     if plate:
         entry = config.get_vehicle(plate)
         if not entry:
-            console.print(error_panel(
-                f"Vehicle '{plate}' not found.",
-                f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
-            ))
+            console.print(
+                error_panel(
+                    f"Vehicle '{plate}' not found.",
+                    f"Registered plates: {', '.join(v.plate for v in config.vehicles)}",
+                )
+            )
             raise typer.Exit(1)
         return entry
 
@@ -72,7 +72,7 @@ def _select_vehicle(config, plate: Optional[str] = None) -> VehicleEntry:
 def run_status(
     headed: bool = False,
     verbose: bool = False,
-    plate: Optional[str] = None,
+    plate: str | None = None,
     all_vehicles: bool = False,
 ) -> None:
     """Run the status command."""
@@ -81,10 +81,12 @@ def run_status(
     # Load config
     manager = ConfigManager()
     if not manager.exists:
-        console.print(error_panel(
-            "No configuration found.",
-            "Run 'faaadmv register' to set up your vehicle first.",
-        ))
+        console.print(
+            error_panel(
+                "No configuration found.",
+                "Run 'faaadmv register' to set up your vehicle first.",
+            )
+        )
         raise typer.Exit(1)
 
     config = manager.load()
@@ -106,10 +108,17 @@ def _run_single_status(
 ) -> None:
     """Check status for a single vehicle."""
     console.print(f"  Checking [bold]{entry.vehicle.plate}[/bold]...")
-    logger.info("Status check: plate=%s vin_last5=%s state=%s", entry.vehicle.plate, entry.vehicle.vin_last5, state)
+    logger.info(
+        "Status check: plate=%s vin_last5=%s state=%s",
+        entry.vehicle.plate,
+        entry.vehicle.vin_last5,
+        state,
+    )
 
     if verbose:
-        console.print(f"[dim]  Vehicle: {entry.vehicle.plate} / {entry.vehicle.masked_vin}[/dim]")
+        console.print(
+            f"[dim]  Vehicle: {entry.vehicle.plate} / {entry.vehicle.masked_vin}[/dim]"
+        )
         console.print(f"[dim]  Provider: {state}[/dim]")
 
     try:
@@ -125,10 +134,12 @@ def _run_single_status(
         _display_status(result, verbose)
     except CaptchaDetectedError:
         console.print()
-        console.print(error_panel(
-            "CAPTCHA detected.",
-            "Try running with --headed flag: faaadmv status --headed",
-        ))
+        console.print(
+            error_panel(
+                "CAPTCHA detected.",
+                "Try running with --headed flag: faaadmv status --headed",
+            )
+        )
         raise typer.Exit(1)
     except VehicleNotFoundError as e:
         console.print()
@@ -136,10 +147,12 @@ def _run_single_status(
         raise typer.Exit(1)
     except BrowserError as e:
         console.print()
-        console.print(error_panel(
-            "Browser error.",
-            f"{e.message}. Make sure Playwright is installed: playwright install chromium",
-        ))
+        console.print(
+            error_panel(
+                "Browser error.",
+                f"{e.message}. Make sure Playwright is installed: playwright install chromium",
+            )
+        )
         raise typer.Exit(1)
     except DMVError as e:
         console.print()
@@ -169,7 +182,9 @@ async def _check_status(
 ) -> RegistrationStatus:
     """Run the async status check against DMV portal."""
     provider_cls = get_provider(state)
-    logger.debug("Using provider: %s", getattr(provider_cls, "__name__", str(provider_cls)))
+    logger.debug(
+        "Using provider: %s", getattr(provider_cls, "__name__", str(provider_cls))
+    )
 
     async with BrowserManager(headless=not headed) as bm:
         provider = provider_cls(bm.context)
@@ -211,7 +226,9 @@ def _display_status(result: RegistrationStatus, verbose: bool = False) -> None:
             elif result.days_until_expiry == 0:
                 content += "\nDays left:  [red]TODAY[/red]"
             else:
-                content += f"\nOverdue:    [red]{abs(result.days_until_expiry)} days[/red]"
+                content += (
+                    f"\nOverdue:    [red]{abs(result.days_until_expiry)} days[/red]"
+                )
 
     if result.last_updated:
         content += f"\nAs of:      {result.last_updated.strftime('%B %d, %Y')}"
@@ -234,5 +251,9 @@ def _display_status(result: RegistrationStatus, verbose: bool = False) -> None:
 
     if verbose:
         console.print()
-        console.print(f"[dim]  Checked via {result.plate} / ***{result.vin_last5[-2:]}[/dim]")
-        console.print(f"[dim]  Renewable: {'Yes' if result.is_renewable else 'No'}[/dim]")
+        console.print(
+            f"[dim]  Checked via {result.plate} / ***{result.vin_last5[-2:]}[/dim]"
+        )
+        console.print(
+            f"[dim]  Renewable: {'Yes' if result.is_renewable else 'No'}[/dim]"
+        )

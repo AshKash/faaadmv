@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import typer
 import platformdirs
+import typer
 from pydantic import ValidationError
 from rich.console import Console
 from rich.panel import Panel
@@ -203,7 +203,9 @@ class FaaadmvREPL:
 
     # --- Vehicle selection ---
 
-    def _pick_vehicle(self, prompt_text: str = "Which vehicle?") -> Optional[VehicleEntry]:
+    def _pick_vehicle(
+        self, prompt_text: str = "Which vehicle?"
+    ) -> Optional[VehicleEntry]:
         """Pick a vehicle. Auto-selects if only one."""
         if not self.config or not self.config.vehicles:
             return None
@@ -302,8 +304,7 @@ class FaaadmvREPL:
 
         console.print()
         if not Confirm.ask(
-            f"  Remove [bold]{entry.vehicle.plate}[/bold]"
-            f" ({entry.display_name})?",
+            f"  Remove [bold]{entry.vehicle.plate}[/bold] ({entry.display_name})?",
             default=False,
         ):
             console.print("  [dim]Cancelled.[/dim]")
@@ -337,9 +338,11 @@ class FaaadmvREPL:
             PaymentKeychain.store(payment)
             self.payment = payment
             console.print()
-            console.print(success_panel(
-                f"Card {payment.masked_number} ({payment.card_type}) saved."
-            ))
+            console.print(
+                success_panel(
+                    f"Card {payment.masked_number} ({payment.card_type}) saved."
+                )
+            )
 
     def _action_toggle_watch(self) -> None:
         """Toggle watch mode (headed + slowmo)."""
@@ -350,7 +353,10 @@ class FaaadmvREPL:
 
     def _artifact_path(self, prefix: str) -> Path:
         """Build a path for automation artifacts."""
-        base_dir = Path(platformdirs.user_state_dir("faaadmv", ensure_exists=True)) / "artifacts"
+        base_dir = (
+            Path(platformdirs.user_state_dir("faaadmv", ensure_exists=True))
+            / "artifacts"
+        )
         base_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return base_dir / f"{prefix}_{timestamp}.png"
@@ -384,7 +390,11 @@ class FaaadmvREPL:
 
         console.print()
         console.print(f"  Checking status for [bold]{entry.vehicle.plate}[/bold]...")
-        logger.info("REPL status check: plate=%s vin=%s", entry.vehicle.plate, entry.vehicle.vin_last5)
+        logger.info(
+            "REPL status check: plate=%s vin=%s",
+            entry.vehicle.plate,
+            entry.vehicle.vin_last5,
+        )
 
         try:
             result = asyncio.run(
@@ -392,17 +402,21 @@ class FaaadmvREPL:
             )
             self._display_status(result)
         except CaptchaDetectedError:
-            console.print(error_panel(
-                "CAPTCHA detected.",
-                "Enable Watch mode (w) to solve manually.",
-            ))
+            console.print(
+                error_panel(
+                    "CAPTCHA detected.",
+                    "Enable Watch mode (w) to solve manually.",
+                )
+            )
         except VehicleNotFoundError as e:
             console.print(error_panel(e.message, e.details))
         except BrowserError as e:
-            console.print(error_panel(
-                "Browser error.",
-                f"{e.message}. Run: playwright install chromium",
-            ))
+            console.print(
+                error_panel(
+                    "Browser error.",
+                    f"{e.message}. Run: playwright install chromium",
+                )
+            )
         except (DMVError, FaaadmvError) as e:
             console.print(error_panel(e.message, e.details))
         except Exception as e:
@@ -430,10 +444,12 @@ class FaaadmvREPL:
 
         if self.payment.is_expired:
             console.print()
-            console.print(error_panel(
-                "Payment card is expired.",
-                f"Card {self.payment.masked_number} expired {self.payment.expiry_display}.",
-            ))
+            console.print(
+                error_panel(
+                    "Payment card is expired.",
+                    f"Card {self.payment.masked_number} expired {self.payment.expiry_display}.",
+                )
+            )
             if Confirm.ask("  Update payment info?", default=True):
                 self._action_payment()
             return
@@ -447,14 +463,14 @@ class FaaadmvREPL:
         logger.info("REPL renew: plate=%s", entry.vehicle.plate)
 
         try:
-            asyncio.run(
-                self._run_renewal(entry.vehicle)
-            )
+            asyncio.run(self._run_renewal(entry.vehicle))
         except CaptchaDetectedError:
-            console.print(error_panel(
-                "CAPTCHA detected.",
-                "Enable Watch mode (w) to solve manually.",
-            ))
+            console.print(
+                error_panel(
+                    "CAPTCHA detected.",
+                    "Enable Watch mode (w) to solve manually.",
+                )
+            )
         except (DMVError, FaaadmvError) as e:
             console.print(error_panel(e.message, e.details))
         except typer.Exit:
@@ -475,14 +491,14 @@ class FaaadmvREPL:
         logger.info("REPL dry-run renew: plate=%s", entry.vehicle.plate)
 
         try:
-            asyncio.run(
-                self._run_renewal(entry.vehicle, dry_run=True)
-            )
+            asyncio.run(self._run_renewal(entry.vehicle, dry_run=True))
         except CaptchaDetectedError:
-            console.print(error_panel(
-                "CAPTCHA detected.",
-                "Enable Watch mode (w) to solve manually.",
-            ))
+            console.print(
+                error_panel(
+                    "CAPTCHA detected.",
+                    "Enable Watch mode (w) to solve manually.",
+                )
+            )
         except (DMVError, FaaadmvError) as e:
             console.print(error_panel(e.message, e.details))
         except Exception as e:
@@ -517,7 +533,9 @@ class FaaadmvREPL:
         provider_cls = get_provider(state)
         captcha_solver = CaptchaSolver()
 
-        config_with_payment = self.config.with_payment(self.payment) if self.payment else self.config
+        config_with_payment = (
+            self.config.with_payment(self.payment) if self.payment else self.config
+        )
 
         headless = not self.watch
         slowmo_ms = self.slowmo_ms if self.watch else 0
@@ -533,7 +551,9 @@ class FaaadmvREPL:
                 )
 
                 if await provider.has_captcha():
-                    solved = await captcha_solver.solve(provider.page, headed=not headless)
+                    solved = await captcha_solver.solve(
+                        provider.page, headed=not headless
+                    )
                     if not solved:
                         raise CaptchaDetectedError()
 
@@ -638,7 +658,9 @@ class FaaadmvREPL:
                 elif result.days_until_expiry == 0:
                     content += "\nDays:    [red]TODAY[/red]"
                 else:
-                    content += f"\nOverdue: [red]{abs(result.days_until_expiry)} days[/red]"
+                    content += (
+                        f"\nOverdue: [red]{abs(result.days_until_expiry)} days[/red]"
+                    )
 
         if result.last_updated:
             content += f"\nAs of:   {result.last_updated.strftime('%B %d, %Y')}"
@@ -647,7 +669,11 @@ class FaaadmvREPL:
             content += f"\n\n[dim]{result.status_message}[/dim]"
 
         console.print()
-        console.print(Panel(content, title="Registration Status", border_style=color, padding=(1, 2)))
+        console.print(
+            Panel(
+                content, title="Registration Status", border_style=color, padding=(1, 2)
+            )
+        )
 
     def _display_eligibility(self, eligibility) -> None:
         """Display eligibility results."""
@@ -658,7 +684,11 @@ class FaaadmvREPL:
             console.print(f"  [red]\u2717[/red] Smog Check: [red]Failed[/red]")
 
         if eligibility.insurance.verified:
-            ins = f" ({eligibility.insurance.provider})" if eligibility.insurance.provider else ""
+            ins = (
+                f" ({eligibility.insurance.provider})"
+                if eligibility.insurance.provider
+                else ""
+            )
             console.print(f"  [green]\u2713[/green] Insurance: Verified{ins}")
         else:
             console.print(f"  [red]\u2717[/red] Insurance: [red]Not Verified[/red]")
@@ -683,15 +713,19 @@ class FaaadmvREPL:
         if result.success:
             console.print(success_panel("Payment successful!"))
             if result.confirmation_number:
-                console.print(f"  Confirmation: [bold]{result.confirmation_number}[/bold]")
+                console.print(
+                    f"  Confirmation: [bold]{result.confirmation_number}[/bold]"
+                )
             if result.new_expiration_date:
                 exp = result.new_expiration_date.strftime("%B %Y")
                 console.print(f"  [bold green]Valid through {exp}.[/bold green]")
         else:
-            console.print(error_panel(
-                "Renewal may not have completed.",
-                result.error_message or "Check your email for confirmation.",
-            ))
+            console.print(
+                error_panel(
+                    "Renewal may not have completed.",
+                    result.error_message or "Check your email for confirmation.",
+                )
+            )
 
 
 def run_repl() -> None:

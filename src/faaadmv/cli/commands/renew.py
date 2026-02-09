@@ -2,13 +2,11 @@
 
 import asyncio
 import logging
-from decimal import Decimal
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 from rich.table import Table
 
 from faaadmv.cli.ui import error_panel, success_panel
@@ -46,7 +44,7 @@ def run_renew(
     dry_run: bool = False,
     headed: bool = False,
     verbose: bool = False,
-    plate: Optional[str] = None,
+    plate: str | None = None,
 ) -> None:
     """Run the renew command."""
     console.print()
@@ -54,16 +52,19 @@ def run_renew(
     # Step 1: Load config
     manager = ConfigManager()
     if not manager.exists:
-        console.print(error_panel(
-            "No configuration found.",
-            "Run 'faaadmv register' to set up your vehicle first.",
-        ))
+        console.print(
+            error_panel(
+                "No configuration found.",
+                "Run 'faaadmv register' to set up your vehicle first.",
+            )
+        )
         raise typer.Exit(1)
 
     config = manager.load()
 
     # Select vehicle
     from faaadmv.cli.commands.status import _select_vehicle
+
     entry = _select_vehicle(config, plate)
     selected_vehicle = entry.vehicle
 
@@ -72,10 +73,12 @@ def run_renew(
 
     if not dry_run and not payment:
         console.print()
-        console.print(error_panel(
-            "Payment information not found.",
-            "Run 'faaadmv register --payment' to add payment info.",
-        ))
+        console.print(
+            error_panel(
+                "Payment information not found.",
+                "Run 'faaadmv register --payment' to add payment info.",
+            )
+        )
         raise typer.Exit(1)
 
     if payment:
@@ -83,24 +86,32 @@ def run_renew(
 
         if payment.is_expired:
             console.print()
-            console.print(error_panel(
-                "Payment card is expired.",
-                f"Card {payment.masked_number} expired {payment.expiry_display}. "
-                "Run 'faaadmv register --payment' to update.",
-            ))
+            console.print(
+                error_panel(
+                    "Payment card is expired.",
+                    f"Card {payment.masked_number} expired {payment.expiry_display}. "
+                    "Run 'faaadmv register --payment' to update.",
+                )
+            )
             raise typer.Exit(1)
 
     console.print()
     _step("Loading configuration...", 1, 6)
 
     if verbose:
-        console.print(f"[dim]    Vehicle: {selected_vehicle.plate} / {selected_vehicle.masked_vin}[/dim]")
+        console.print(
+            f"[dim]    Vehicle: {selected_vehicle.plate} / {selected_vehicle.masked_vin}[/dim]"
+        )
         if config.owner:
             console.print(f"[dim]    Owner: {config.owner.full_name}[/dim]")
         if payment:
-            console.print(f"[dim]    Card: {payment.masked_number} ({payment.card_type})[/dim]")
+            console.print(
+                f"[dim]    Card: {payment.masked_number} ({payment.card_type})[/dim]"
+            )
 
-    logger.info("Renew: plate=%s dry_run=%s headed=%s", selected_vehicle.plate, dry_run, headed)
+    logger.info(
+        "Renew: plate=%s dry_run=%s headed=%s", selected_vehicle.plate, dry_run, headed
+    )
 
     # Run async renewal flow
     try:
@@ -115,10 +126,12 @@ def run_renew(
         )
     except CaptchaDetectedError:
         console.print()
-        console.print(error_panel(
-            "CAPTCHA detected.",
-            "Try running with --headed flag: faaadmv renew --headed",
-        ))
+        console.print(
+            error_panel(
+                "CAPTCHA detected.",
+                "Try running with --headed flag: faaadmv renew --headed",
+            )
+        )
         raise typer.Exit(1)
     except CaptchaSolveFailedError as e:
         console.print()
@@ -150,10 +163,12 @@ def run_renew(
         raise typer.Exit(1)
     except BrowserError as e:
         console.print()
-        console.print(error_panel(
-            "Browser error.",
-            f"{e.message}. Make sure Playwright is installed: playwright install chromium",
-        ))
+        console.print(
+            error_panel(
+                "Browser error.",
+                f"{e.message}. Make sure Playwright is installed: playwright install chromium",
+            )
+        )
         raise typer.Exit(1)
     except DMVError as e:
         console.print()
@@ -221,10 +236,12 @@ async def _run_renewal(
             # Dry run stops here
             if dry_run:
                 console.print()
-                console.print(success_panel(
-                    "Dry run complete. Ready for actual renewal."
-                ))
-                console.print("[dim]Run 'faaadmv renew' (without --dry-run) to proceed.[/dim]")
+                console.print(
+                    success_panel("Dry run complete. Ready for actual renewal.")
+                )
+                console.print(
+                    "[dim]Run 'faaadmv renew' (without --dry-run) to proceed.[/dim]"
+                )
                 return
 
             # Payment confirmation
@@ -250,7 +267,7 @@ async def _run_renewal(
             _display_result(result)
 
         finally:
-                await provider.cleanup()
+            await provider.cleanup()
 
 
 def _step(message: str, current: int, total: int) -> None:
@@ -329,7 +346,9 @@ def _display_result(result: RenewalResult) -> None:
                 f"  [bold green]Your registration is now valid through {exp_str}.[/bold green]"
             )
     else:
-        console.print(error_panel(
-            "Renewal may not have completed.",
-            result.error_message or "Check your email for confirmation.",
-        ))
+        console.print(
+            error_panel(
+                "Renewal may not have completed.",
+                result.error_message or "Check your email for confirmation.",
+            )
+        )

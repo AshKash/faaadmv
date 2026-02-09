@@ -49,18 +49,6 @@ class RegistrationStatus(BaseModel):
         }
         return status_map.get(self.status, str(self.status))
 
-    @property
-    def status_emoji(self) -> str:
-        """Return status emoji for display."""
-        emoji_map = {
-            StatusType.CURRENT: "\u2713",  # checkmark
-            StatusType.EXPIRING_SOON: "\u26a0\ufe0f",  # warning
-            StatusType.PENDING: "\u26a0\ufe0f",  # warning
-            StatusType.EXPIRED: "\u2717",  # X
-            StatusType.HOLD: "\u26a0\ufe0f",  # warning
-        }
-        return emoji_map.get(self.status, "")
-
 
 class SmogStatus(BaseModel):
     """Smog certification status."""

@@ -69,3 +69,4 @@ Thumbs.db
 *.key
 credentials.json
 .env.local
+uv.lock

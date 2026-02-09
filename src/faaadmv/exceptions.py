@@ -60,36 +60,6 @@ class BrowserError(FaaadmvError):
     """Base class for browser automation errors."""
 
 
-class NavigationError(BrowserError):
-    """Failed to navigate to page."""
-
-    def __init__(self, url: str, reason: Optional[str] = None) -> None:
-        super().__init__(
-            f"Failed to navigate to {url}",
-            reason,
-        )
-
-
-class TimeoutError(BrowserError):
-    """Operation timed out."""
-
-    def __init__(self, operation: str, timeout_seconds: int) -> None:
-        super().__init__(
-            f"Operation timed out: {operation}",
-            f"Timeout after {timeout_seconds} seconds",
-        )
-
-
-class SelectorNotFoundError(BrowserError):
-    """Element selector not found on page."""
-
-    def __init__(self, selector: str) -> None:
-        super().__init__(
-            "Page element not found",
-            f"Selector '{selector}' not found. The DMV website may have changed.",
-        )
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DMV Errors
 # ─────────────────────────────────────────────────────────────────────────────

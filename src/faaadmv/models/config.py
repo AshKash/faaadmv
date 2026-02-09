@@ -138,23 +138,3 @@ class UserConfig(BaseModel):
     def with_payment(self, payment: PaymentInfo) -> "UserConfig":
         """Return new config with payment info attached."""
         return self.model_copy(update={"payment": payment})
-
-    @property
-    def has_payment(self) -> bool:
-        """Check if payment info is loaded."""
-        return self.payment is not None
-
-    @property
-    def summary(self) -> dict[str, str]:
-        """Return summary dict for display."""
-        default = self.default_vehicle
-        result = {
-            "plate": default.vehicle.plate,
-            "vin": default.vehicle.masked_vin,
-            "state": self.state,
-            "vehicles": str(len(self.vehicles)),
-        }
-        if self.owner:
-            result["owner"] = self.owner.full_name
-            result["email"] = self.owner.masked_email
-        return result

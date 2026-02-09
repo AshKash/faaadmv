@@ -1,7 +1,5 @@
 """Playwright browser lifecycle manager."""
 
-from typing import Optional
-
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 
@@ -17,11 +15,6 @@ class BrowserManager:
     # Default browser settings
     DEFAULT_TIMEOUT = 30000  # 30 seconds
     DEFAULT_VIEWPORT = {"width": 1280, "height": 720}
-    DEFAULT_USER_AGENT = (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
 
     # Tracker domains to block
     BLOCKED_PATTERNS = [
@@ -40,7 +33,7 @@ class BrowserManager:
         slowmo_ms: int = 0,
         locale: str = "en-US",
         timezone_id: str = "America/Los_Angeles",
-        user_agent: Optional[str] = None,
+        user_agent: str | None = None,
         stealth: bool = True,
     ) -> None:
         """Initialize browser manager.
@@ -57,8 +50,8 @@ class BrowserManager:
         self.user_agent = user_agent
         self.stealth = stealth
         self._playwright = None
-        self._browser: Optional[Browser] = None
-        self._context: Optional[BrowserContext] = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
 
     async def launch(self) -> "BrowserManager":
         """Launch browser and create context.
@@ -130,12 +123,12 @@ class BrowserManager:
         return await self._context.new_page()
 
     @property
-    def context(self) -> Optional[BrowserContext]:
+    def context(self) -> BrowserContext | None:
         """Get the browser context."""
         return self._context
 
     @property
-    def browser(self) -> Optional[Browser]:
+    def browser(self) -> Browser | None:
         """Get the browser instance."""
         return self._browser
 

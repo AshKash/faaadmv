@@ -1,7 +1,6 @@
 """Register command implementation."""
 
 import logging
-from typing import Optional
 
 import typer
 from pydantic import ValidationError
@@ -13,7 +12,6 @@ from rich.table import Table
 from faaadmv.cli.ui import error_panel, success_panel
 from faaadmv.core.config import ConfigManager
 from faaadmv.core.keychain import PaymentKeychain
-from faaadmv.exceptions import ConfigNotFoundError
 from faaadmv.models import UserConfig, VehicleEntry, VehicleInfo
 from faaadmv.models.owner import Address, OwnerInfo
 from faaadmv.models.payment import PaymentInfo
@@ -38,7 +36,7 @@ def run_register(
         return
 
     manager = ConfigManager()
-    existing_config: Optional[UserConfig] = None
+    existing_config: UserConfig | None = None
 
     # For partial updates, load existing config first
     if (vehicle_only or payment_only) and manager.exists:
@@ -50,10 +48,12 @@ def run_register(
             raise typer.Exit(1)
     elif vehicle_only or payment_only:
         console.print()
-        console.print(error_panel(
-            "No existing configuration found.",
-            "Run 'faaadmv register' first to set up all your information.",
-        ))
+        console.print(
+            error_panel(
+                "No existing configuration found.",
+                "Run 'faaadmv register' first to set up all your information.",
+            )
+        )
         raise typer.Exit(1)
 
     # Interactive setup
@@ -92,7 +92,9 @@ def run_register(
             console.print("[bold cyan]--- Payment (Optional) ---[/bold cyan]")
             console.print()
             console.print("[dim]  Payment info is only needed for renewals.[/dim]")
-            console.print("[dim]  You can add it later with 'faaadmv register --payment'.[/dim]")
+            console.print(
+                "[dim]  You can add it later with 'faaadmv register --payment'.[/dim]"
+            )
             console.print()
             if Confirm.ask("  Add payment information now?", default=False):
                 console.print()
@@ -124,7 +126,9 @@ def run_register(
                 nickname = Prompt.ask("  Nickname (optional)", default="")
                 nickname = nickname.strip() or None
                 make_default = Confirm.ask("  Set as default?", default=False)
-                config = existing_config.add_vehicle(vehicle, nickname=nickname, is_default=make_default)
+                config = existing_config.add_vehicle(
+                    vehicle, nickname=nickname, is_default=make_default
+                )
         elif existing_config and payment_only:
             config = existing_config
         else:
@@ -174,10 +178,12 @@ def _handle_verify() -> None:
 
     manager = ConfigManager()
     if not manager.exists:
-        console.print(error_panel(
-            "No configuration found.",
-            "Run 'faaadmv register' to set up your vehicle.",
-        ))
+        console.print(
+            error_panel(
+                "No configuration found.",
+                "Run 'faaadmv register' to set up your vehicle.",
+            )
+        )
         raise typer.Exit(1)
 
     config = manager.load()
@@ -346,9 +352,9 @@ def _collect_payment_info() -> dict:
 
 
 def _build_vehicle(
-    data: Optional[dict],
-    existing: Optional[UserConfig],
-) -> Optional[VehicleInfo]:
+    data: dict | None,
+    existing: UserConfig | None,
+) -> VehicleInfo | None:
     if data:
         return VehicleInfo(**data)
     if existing:
@@ -357,9 +363,9 @@ def _build_vehicle(
 
 
 def _build_owner(
-    data: Optional[dict],
-    existing: Optional[UserConfig],
-) -> Optional[OwnerInfo]:
+    data: dict | None,
+    existing: UserConfig | None,
+) -> OwnerInfo | None:
     if data:
         return OwnerInfo(**data)
     if existing:
@@ -367,7 +373,7 @@ def _build_owner(
     return None
 
 
-def _build_payment(data: Optional[dict]) -> Optional[PaymentInfo]:
+def _build_payment(data: dict | None) -> PaymentInfo | None:
     if data:
         return PaymentInfo(**data)
     return None
